@@ -43,6 +43,10 @@ body {
     @apply bg-base-300;
 }
 
+.border-color {
+    @apply bg-base-100;
+}
+
 @utility btn {
     @apply rounded-lg;
 }
