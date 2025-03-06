@@ -1,0 +1,19 @@
+{
+    "manifest_version": 3,
+    "name": "[DEV] Trend Word - Learn Through Headlines",
+    "description": "Expand your vocabulary daily with words from trending news stories!",
+    "version": "1.0.0",
+    "action": {
+      "default_popup": "index.html",
+      "default_icon": "icons/icon128.png"
+    },
+    "background": {
+      "service_worker": "scripts/background.js"
+    },
+    "icons": {
+      "16": "icons/icon16.png",
+      "32": "icons/icon32.png",
+      "48": "icons/icon48.png",
+      "128": "icons/icon128.png"
+    }
+  }
