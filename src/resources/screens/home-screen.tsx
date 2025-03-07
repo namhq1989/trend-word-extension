@@ -6,6 +6,7 @@ import { Separator } from '@/components/ui/separator.tsx'
 import MenuItem from '@/resources/components/menu-item.tsx'
 import { goTo } from 'react-chrome-extension-router'
 import WordListScreen from '@/resources/screens/word-list-screen.tsx'
+import SettingsScreen from '@/resources/screens/settings-screen.tsx'
 
 const HomeScreen = () => {
   // Example word data
@@ -41,29 +42,37 @@ const HomeScreen = () => {
             icon={Library}
             onClick={() => goTo(WordListScreen)}
           />
-          <MenuItem title='Settings' icon={Settings} onClick={() => {}} />
+          <MenuItem
+            title='Settings'
+            icon={Settings}
+            onClick={() => goTo(SettingsScreen)}
+          />
         </div>
         <div className='flex flex-row gap-4 justify-center'>
-          <HeaderTitle title='Trend Word' />
+          <HeaderTitle title='WordDrop' />
         </div>
       </div>
       <div className='flex flex-col gap-8 p-4 mt-4'>
         <div className='flex flex-col gap-6'>
           <div className='flex flex-col gap-2'>
             <h2 className='text-primary text-4xl font-bold'>{wordData.word}</h2>
-            <div className='flex flex-row gap-1'>
+            <div className='flex items-center gap-2'>
+              <Volume2
+                size={20}
+                className='cursor-pointer'
+                fill='var(--foreground)'
+              />
+              <div className='text-sm'>{wordData.pronunciation}</div>
+            </div>
+            <div className='flex flex-row gap-1 mt-1'>
               <Badge>advanced</Badge>
               {wordData.partOfSpeeches.map((partOfSpeech) => {
                 return (
-                  <Badge variant='secondary' key={partOfSpeech}>
+                  <Badge variant='accent' key={partOfSpeech}>
                     {partOfSpeech}
                   </Badge>
                 )
               })}
-            </div>
-            <div className='flex items-center gap-2 mt-1'>
-              <Volume2 size={20} className='cursor-pointer' />
-              <div className='text-sm'>{wordData.pronunciation}</div>
             </div>
           </div>
 
@@ -120,7 +129,7 @@ const HomeScreen = () => {
               {newsData.source}
             </a>
 
-            <p className='text-sm text-muted-foreground mt-2'>
+            <p className='text-sm mt-2'>
               Lorem ipsum dolor sit amet, consectetur adipiscing elit. Penatibus
               primis tempus porta conubia ultricies luctus eleifend justo.
               Auctor dolor conubia lacus turpis nostra duis lobortis egestas.
