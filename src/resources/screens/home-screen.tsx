@@ -55,7 +55,7 @@ const HomeScreen = () => {
               <Badge>advanced</Badge>
               {wordData.partOfSpeeches.map((partOfSpeech) => {
                 return (
-                  <Badge variant='destructive' key={partOfSpeech}>
+                  <Badge variant='secondary' key={partOfSpeech}>
                     {partOfSpeech}
                   </Badge>
                 )
@@ -106,7 +106,9 @@ const HomeScreen = () => {
         <div className='flex flex-col gap-2'>
           <SectionTitle title='In The News' />
           <div className='flex flex-col gap-2 bg-container p-4'>
-            <Badge className='mb-2'>{newsData.category}</Badge>
+            <Badge variant='secondary' className='mb-2'>
+              {newsData.category}
+            </Badge>
 
             <h4 className='text-lg font-bold'>{newsData.headline}</h4>
 
