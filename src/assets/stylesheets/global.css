@@ -216,10 +216,6 @@
         @apply hover:bg-muted transition-colors duration-300;
     }
 
-    .bg-container {
-        @apply bg-muted;
-    }
-
     .overlay {
         @apply absolute inset-0 bg-black/60;
     }
@@ -262,7 +258,7 @@ body {
 }
 
 .bg-container {
-    @apply bg-muted;
+    @apply bg-muted rounded-xl;
 }
 
 
