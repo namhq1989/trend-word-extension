@@ -1,5 +1,5 @@
 import ky, { KyInstance } from 'ky'
-import useAuthControllerStore from '@/app/controllers/auth_controller.ts'
+import useAuthControllerStore from '@/app/controllers/auth-controller.ts'
 import { create } from 'zustand/react'
 
 interface IHttp {

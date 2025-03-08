@@ -1,12 +1,19 @@
 import { Bookmark, ChevronRight } from 'lucide-react'
 import { Badge } from '@/components/ui/badge.tsx'
 import { Separator } from '@/components/ui/separator.tsx'
+import { goTo } from 'react-chrome-extension-router'
+import WordDetailScreen from '@/resources/screens/word-detail-screen.tsx'
 
 const WordListItem = () => {
   return (
     <div className='flex flex-col bg-container p-4 gap-2'>
       <div className='flex justify-between items-center'>
-        <h2 className='text-2xl text-primary font-bold cursor-pointer'>
+        <h2
+          className='text-2xl text-primary font-bold cursor-pointer'
+          onClick={() => {
+            goTo(WordDetailScreen)
+          }}
+        >
           emergency
         </h2>
         <Bookmark
@@ -40,7 +47,12 @@ const WordListItem = () => {
           <p>•</p>
           <p>15/02/2025</p>
         </div>
-        <div className='flex w-5 h-5 items-center justify-center text-muted-foreground cursor-pointer'>
+        <div
+          className='flex w-5 h-5 items-center justify-center text-muted-foreground cursor-pointer'
+          onClick={() => {
+            goTo(WordDetailScreen)
+          }}
+        >
           <ChevronRight size={20} />
         </div>
       </div>
