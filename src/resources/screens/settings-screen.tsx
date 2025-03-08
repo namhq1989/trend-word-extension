@@ -6,13 +6,33 @@ import { Button } from '@/components/ui/button.tsx'
 import { useEffect } from 'react'
 import {
   ChevronRight,
+  Code,
+  Hash,
   Heart,
+  Info,
   Languages,
   MessageSquareCode,
   MoonStar,
 } from 'lucide-react'
 import { Switch } from '@/components/ui/switch.tsx'
 import { useTheme } from '@/components/theme/theme.tsx'
+import { Sheet, SheetContent, SheetTrigger } from '@/components/ui/sheet'
+import {
+  Select,
+  SelectContent,
+  SelectGroup,
+  SelectItem,
+  SelectLabel,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select'
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from '@/components/ui/tooltip'
+import { Input } from '@/components/ui/input.tsx'
 
 const SettingsScreen = () => {
   const { setTheme, theme } = useTheme()
@@ -33,6 +53,56 @@ const SettingsScreen = () => {
         <HeaderTitle title='Settings' />
       </div>
       <div className='flex flex-col p-4 gap-8'>
+        {/*Customization*/}
+        <div className='flex flex-col gap-2'>
+          <SectionTitle title='Customization' />
+          <div className='flex flex-col gap-2'>
+            <div className='flex bg-container p-4 justify-between items-center'>
+              <div className='flex flex-row gap-2 items-center justify-center'>
+                <Code size={20} className='text-muted-foreground' />
+                <p className='text-sm text-foreground'>Difficulty level</p>
+                <TooltipProvider>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <Info size={16} className='text-muted-foreground' />
+                    </TooltipTrigger>
+                    <TooltipContent className='w-[250px] p-4'>
+                      <p className='text-sm'>
+                        Higher difficulty levels include words from all previous
+                        levels, expanding your vocabulary range as you progress
+                      </p>
+                    </TooltipContent>
+                  </Tooltip>
+                </TooltipProvider>
+              </div>
+              <Select>
+                <SelectTrigger className='w-[140px]'>
+                  <SelectValue placeholder='Select a level' />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectGroup>
+                    <SelectLabel>Level</SelectLabel>
+                    <SelectItem value='beginner'>Beginner</SelectItem>
+                    <SelectItem value='intermediate'>Intermediate</SelectItem>
+                    <SelectItem value='advanced'>Advanced</SelectItem>
+                  </SelectGroup>
+                </SelectContent>
+              </Select>
+            </div>
+            <div className='flex bg-container p-4 justify-between items-center'>
+              <div className='flex flex-row gap-2 items-center justify-center'>
+                <Hash size={20} className='text-muted-foreground' />
+                <p className='text-sm text-foreground'>Max words per day</p>
+              </div>
+              <Input
+                type='number'
+                defaultValue={10}
+                min={5}
+                className='w-[140px]'
+              />
+            </div>
+          </div>
+        </div>
         {/*Categories*/}
         <div className='flex flex-col gap-2'>
           <SectionTitle title='Categories' />
@@ -61,7 +131,7 @@ const SettingsScreen = () => {
           <SectionTitle title='Appearances' />
           <div className='flex flex-col gap-2'>
             <div className='flex bg-container p-4 justify-between items-center'>
-              <div className='flex flex-row gap-4 items-center justify-center'>
+              <div className='flex flex-row gap-2 items-center justify-center'>
                 <MoonStar size={20} className='text-muted-foreground' />
                 <p className='text-sm text-foreground'>Dark mode</p>
               </div>
@@ -73,14 +143,11 @@ const SettingsScreen = () => {
               />
             </div>
             <div className='flex bg-container p-4 justify-between items-center'>
-              <div className='flex flex-row gap-4 items-center justify-center'>
+              <div className='flex flex-row gap-2 items-center justify-center'>
                 <Languages size={20} className='text-muted-foreground' />
                 <p className='text-sm text-foreground'>Translate to</p>
               </div>
-              <div className='flex flex-row gap-2 items-center justify-center cursor-pointer'>
-                <p className='text-sm text-foreground'>English</p>
-                <ChevronRight size={20} className='text-muted-foreground' />
-              </div>
+              <TranslateToSheet />
             </div>
           </div>
         </div>
@@ -99,12 +166,12 @@ const SettingsScreen = () => {
               <p className='text-sm'>Version</p>
               <p className='text-sm'>1.0.0</p>
             </div>
-            <div className='flex flex-col gap-2 mt-4 px-2'>
-              <div className='flex gap-1 items-center cursor-pointer'>
+            <div className='flex flex-col gap-4 mt-4 px-2'>
+              <div className='flex gap-2 items-center cursor-pointer'>
                 <MessageSquareCode size={16} className='text-primary' />
                 <span className='text-sm text-primary'>Send feedback</span>
               </div>
-              <div className='flex gap-1 items-center cursor-pointer'>
+              <div className='flex gap-2 items-center cursor-pointer'>
                 <Heart size={16} className='text-primary' />
                 <span className='text-sm text-primary'>Rate extension</span>
               </div>
@@ -113,6 +180,67 @@ const SettingsScreen = () => {
         </div>
       </div>
     </div>
+  )
+}
+
+const TranslateToSheet = () => {
+  const { languages, getLanguages, setLanguage } = useDataControllerStore()
+
+  useEffect(() => {
+    const fetchData = async () => {
+      await getLanguages()
+    }
+
+    fetchData().then()
+  }, [getLanguages])
+
+  if (!languages.length) {
+    return null
+  }
+
+  let selectedLanguage = languages.find((language) => language.isSelected)
+  if (!selectedLanguage) {
+    selectedLanguage = languages[0]
+  }
+
+  return (
+    <Sheet>
+      <SheetTrigger asChild>
+        <div className='flex flex-row gap-2 items-center justify-center cursor-pointer'>
+          <p className='text-sm text-foreground'>{selectedLanguage.name}</p>
+          <ChevronRight size={20} className='text-muted-foreground' />
+        </div>
+      </SheetTrigger>
+      <SheetContent
+        side='bottom'
+        className='rounded-t-xl h-[400px] overflow-auto'
+      >
+        <div className='flex flex-col gap-8 p-4 mt-16'>
+          <div className='flex flex-col gap-1'>
+            <p className='text-lg'>Select Translation Language</p>
+            <p className='text-sm text-muted-foreground'>
+              Choose the language you want to translate your English content
+              into
+            </p>
+          </div>
+          <div className='flex flex-col gap-2'>
+            {languages.map((language) => (
+              <div key={language.id}>
+                <Button
+                  variant={
+                    language.id === selectedLanguage.id ? 'default' : 'outline'
+                  }
+                  className='w-full h-10 cursor-pointer justify-start text-sm'
+                  onClick={() => setLanguage(language.id)}
+                >
+                  {language.name}
+                </Button>
+              </div>
+            ))}
+          </div>
+        </div>
+      </SheetContent>
+    </Sheet>
   )
 }
 
