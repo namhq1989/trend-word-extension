@@ -18,7 +18,7 @@ const WordListItem = () => {
       </div>
       <div className='flex flex-row gap-1'>
         <Badge variant='secondary'>intermediate</Badge>
-        <Badge variant='secondary'>noun</Badge>
+        <Badge variant='accent'>noun</Badge>
       </div>
       <p className='text-sm mt-2'>
         something dangerous or serious, such as an accident, that happens

@@ -41,6 +41,7 @@ const CategoryFilter = () => {
       </SelectTrigger>
       <SelectContent>
         <SelectGroup>
+          <SelectItem value='all'>All</SelectItem>
           <SelectItem value='politics'>Politics</SelectItem>
           <SelectItem value='technology'>Technology</SelectItem>
           <SelectItem value='business'>Business</SelectItem>
@@ -64,8 +65,8 @@ const BookmarkFilter = () => {
       </SelectTrigger>
       <SelectContent>
         <SelectGroup>
-          <SelectItem value='politics'>All</SelectItem>
-          <SelectItem value='technology'>Bookmarked</SelectItem>
+          <SelectItem value='all'>All</SelectItem>
+          <SelectItem value='bookmarked'>Bookmarked</SelectItem>
         </SelectGroup>
       </SelectContent>
     </Select>
