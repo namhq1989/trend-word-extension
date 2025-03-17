@@ -32,7 +32,7 @@ const kyInstance = ky.create({
   hooks: {
     beforeRequest: [
       (request) => {
-        const userToken = useAuthControllerStore().getToken
+        const userToken = useAuthControllerStore.getState().getToken()
         if (userToken) {
           request.headers.set('Authorization', `Bearer ${userToken}`)
         }
@@ -69,10 +69,23 @@ const useHttpStore = create<IHttp>((_, get) => ({
   http: kyInstance,
 
   get: async <T>(path: string, payload?: object): Promise<T> => {
-    const queryParams = payload
-      ? new URLSearchParams(payload as Record<string, string>).toString()
-      : ''
-    const fullPath = queryParams ? `${path}?${queryParams}` : path
+    if (!payload) {
+      const response = await get().http.get(path)
+      return handleApiResponse<T>(response)
+    }
+
+    const processedPayload: Record<string, string> = {}
+    Object.entries(payload).forEach(([key, value]) => {
+      if (Array.isArray(value)) {
+        processedPayload[key] = value.join(',')
+      } else {
+        processedPayload[key] = String(value)
+      }
+    })
+
+    const queryParams = new URLSearchParams(processedPayload).toString()
+    const fullPath = `${path}?${queryParams}`
+
     const response = await get().http.get(fullPath)
     return handleApiResponse<T>(response)
   },
