@@ -48,6 +48,9 @@ interface IStorage {
   updateFetchedCategories: (categories: string[]) => Promise<string[]>
   getFetchedCategories: () => Promise<string[]>
   displayErrorNotification: (message: string) => Promise<void>
+  
+  toggleWordBookmark: (wordId: string, newStatus?: boolean, wordData?: IWord) => Promise<boolean>
+  getWordBookmarkStatus: (wordId: string) => Promise<boolean>
 }
 
 // Helper function to get today's date in YYYY-MM-DD format
@@ -437,6 +440,95 @@ const useStorageStore = create<IStorage>((_, get) => ({
       }
       resolve()
     })
+  },
+
+  // Function to toggle bookmark status for a word
+  toggleWordBookmark: (wordId: string, newStatus?: boolean, wordData?: IWord) => {
+    return new Promise<boolean>((resolve, reject) => {
+      // First, check the current bookmark status if newStatus is not provided
+      const getStatus: Promise<boolean> = newStatus !== undefined 
+        ? Promise.resolve(newStatus) 
+        : get().getWordBookmarkStatus(wordId).then(status => !status); // Toggle if not provided
+      
+      getStatus.then((bookmarkStatus: boolean) => {
+          // Send message to background script to update the word in IndexedDB
+          chrome.runtime.sendMessage(
+            {
+              action: 'toggleWordBookmark',
+              wordId,
+              bookmarked: bookmarkStatus,
+              wordData // Pass the complete word data if available
+            },
+            (response) => {
+              if (chrome.runtime.lastError) {
+                console.error('Error toggling bookmark:', chrome.runtime.lastError);
+                reject(chrome.runtime.lastError);
+              } else if (!response || !response.success) {
+                console.error('Error toggling bookmark:', response?.error || 'Unknown error');
+                reject(new Error(response?.error || 'Unknown error'));
+              } else {
+                // Also update the word in cache if it exists
+                get().getCachedWords().then(cache => {
+                  if (cache) {
+                    const updatedWords = cache.words.map(word => {
+                      if (word.id === wordId) {
+                        return { ...word, bookmarked: bookmarkStatus };
+                      }
+                      return word;
+                    });
+                    
+                    // Update the cache with the new words array
+                    chrome.storage.local.set({
+                      wordsCache: { ...cache, words: updatedWords }
+                    }, () => {
+                      if (chrome.runtime.lastError) {
+                        console.error('Error updating cache:', chrome.runtime.lastError);
+                      }
+                    });
+                    
+                    // If the last fetched word is the one being bookmarked, update it too
+                    if (cache.lastFetchedWord && cache.lastFetchedWord.id === wordId) {
+                      const updatedLastFetchedWord = { ...cache.lastFetchedWord, bookmarked: bookmarkStatus };
+                      chrome.storage.local.set({
+                        wordsCache: { ...cache, lastFetchedWord: updatedLastFetchedWord }
+                      });
+                    }
+                  }
+                });
+                
+                resolve(bookmarkStatus);
+              }
+            }
+          );
+        })
+        .catch(error => {
+          console.error('Error getting bookmark status:', error);
+          reject(error);
+        });
+    });
+  },
+
+  // Function to get bookmark status for a word
+  getWordBookmarkStatus: (wordId: string) => {
+    return new Promise<boolean>((resolve, reject) => {
+      chrome.runtime.sendMessage(
+        {
+          action: 'getWordBookmarkStatus',
+          wordId
+        },
+        (response) => {
+          if (chrome.runtime.lastError) {
+            console.error('Error getting bookmark status:', chrome.runtime.lastError);
+            reject(chrome.runtime.lastError);
+          } else if (!response || !response.success) {
+            console.error('Error getting bookmark status:', response?.error || 'Unknown error');
+            reject(new Error(response?.error || 'Unknown error'));
+          } else {
+            resolve(response.bookmarked || false);
+          }
+        }
+      );
+    });
   },
 }))
 

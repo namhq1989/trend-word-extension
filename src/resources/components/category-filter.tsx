@@ -7,9 +7,15 @@ import {
   SelectValue,
 } from '@/components/ui/select.tsx'
 
-const CategoryFilter = () => {
+interface CategoryFilterProps {
+  value?: string
+  onChange?: (value: string) => void
+  disabled?: boolean
+}
+
+const CategoryFilter = ({ value = 'all', onChange, disabled = false }: CategoryFilterProps) => {
   return (
-    <Select>
+    <Select value={value} onValueChange={onChange} disabled={disabled}>
       <SelectTrigger className='w-[160px]'>
         <SelectValue placeholder='Category' />
       </SelectTrigger>

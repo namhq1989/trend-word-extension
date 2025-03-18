@@ -54,6 +54,28 @@ function addWordToDatabase(word) {
       date: new Date().toISOString()
     };
     
+    // Extract unique categories from news items
+    if (word.news && word.news.length > 0) {
+      console.log('Word has news items in addWordToDatabase:', word.news.length);
+      
+      const categoriesSet = new Set();
+      word.news.forEach(newsItem => {
+        // Check for categories field in news items (which is the correct field according to IWordNews)
+        if (newsItem.categories && Array.isArray(newsItem.categories)) {
+          console.log('Found categories array in news item:', newsItem.categories);
+          newsItem.categories.forEach(cat => categoriesSet.add(cat));
+        }
+        // Also check for category field as fallback
+        else if (newsItem.category) {
+          console.log('Found category in news item:', newsItem.category);
+          categoriesSet.add(newsItem.category);
+        }
+      });
+      
+      wordWithDate.categories = Array.from(categoriesSet);
+      console.log('Extracted categories in addWordToDatabase:', wordWithDate.categories);
+    }
+    
     const transaction = db.transaction([WORDS_STORE_NAME], 'readwrite');
     const store = transaction.objectStore(WORDS_STORE_NAME);
     const request = store.put(wordWithDate); // Using put instead of add to handle updates
@@ -90,6 +112,178 @@ function getAllWords() {
     request.onsuccess = () => {
       console.log(`Retrieved ${request.result.length} words from IndexedDB`);
       resolve(request.result);
+    };
+  });
+}
+
+// Get bookmarked words from IndexedDB with pagination and category filtering
+function getBookmarkedWords(start = 0, limit = 10, category) {
+  return new Promise((resolve, reject) => {
+    if (!db) {
+      reject(new Error('Database not initialized'));
+      return;
+    }
+    
+    const transaction = db.transaction([WORDS_STORE_NAME], 'readonly');
+    const store = transaction.objectStore(WORDS_STORE_NAME);
+    const request = store.getAll();
+    
+    request.onerror = (event) => {
+      console.error('Error getting bookmarked words from IndexedDB:', event.target.error);
+      reject(event.target.error);
+    };
+    
+    request.onsuccess = () => {
+      // Filter words that are bookmarked
+      let bookmarkedWords = request.result.filter(word => word.bookmarked === true);
+      
+      // Apply category filter if specified
+      if (category) {
+        bookmarkedWords = bookmarkedWords.filter(word => {
+          // Check if the word has categories array
+          if (word.categories && Array.isArray(word.categories)) {
+            return word.categories.includes(category);
+          }
+          // Fallback to checking news items directly if categories array is not available
+          else if (word.news && Array.isArray(word.news)) {
+            return word.news.some(newsItem => newsItem.category === category);
+          }
+          // Legacy support for old word.category property
+          else if (word.category) {
+            return word.category === category;
+          }
+          return false;
+        });
+      }
+      
+      // Sort by date (newest first)
+      bookmarkedWords.sort((a, b) => {
+        const dateA = new Date(a.date || 0);
+        const dateB = new Date(b.date || 0);
+        return dateB - dateA;
+      });
+      
+      // Get total count before pagination
+      const total = bookmarkedWords.length;
+      
+      // Apply pagination
+      const paginatedWords = bookmarkedWords.slice(start, start + limit);
+      
+      console.log(`Retrieved ${paginatedWords.length} bookmarked words from IndexedDB (total: ${total})`);
+      resolve({ words: paginatedWords, total });
+    };
+  });
+}
+
+// Toggle bookmark status for a word in IndexedDB
+function toggleWordBookmark(wordId, bookmarked, wordData = null) {
+  return new Promise((resolve, reject) => {
+    if (!db) {
+      reject(new Error('Database not initialized'));
+      return;
+    }
+    
+    // First, get the word from the database
+    const transaction = db.transaction([WORDS_STORE_NAME], 'readwrite');
+    const store = transaction.objectStore(WORDS_STORE_NAME);
+    const request = store.get(wordId);
+    
+    request.onerror = (event) => {
+      console.error('Error getting word from IndexedDB:', event.target.error);
+      reject(event.target.error);
+    };
+    
+    request.onsuccess = () => {
+      const word = request.result;
+      
+      if (!word) {
+        // If word doesn't exist in IndexedDB yet
+        if (wordData) {
+          // If word data was provided, use it
+          wordData.bookmarked = bookmarked;
+          
+          const addRequest = store.add(wordData);
+          
+          addRequest.onerror = (event) => {
+            console.error('Error adding new bookmarked word to IndexedDB:', event.target.error);
+            reject(event.target.error);
+          };
+          
+          addRequest.onsuccess = () => {
+            console.log('New bookmarked word added to IndexedDB successfully');
+            resolve(bookmarked);
+          };
+        } else {
+          // If no word data was provided, check local storage cache
+          chrome.storage.local.get(['cachedWords'], (result) => {
+            const cachedWords = result.cachedWords || {};
+            const cachedWord = cachedWords[wordId];
+            
+            if (cachedWord) {
+              // Use the cached word data and add bookmark status
+              cachedWord.bookmarked = bookmarked;
+              
+              const addRequest = store.add(cachedWord);
+              
+              addRequest.onerror = (event) => {
+                console.error('Error adding new bookmarked word to IndexedDB:', event.target.error);
+                reject(event.target.error);
+              };
+              
+              addRequest.onsuccess = () => {
+                console.log('New bookmarked word added to IndexedDB successfully');
+                resolve(bookmarked);
+              };
+            }
+          });
+        }
+      } else {
+        // Update the existing word with new bookmark status
+        word.bookmarked = bookmarked;
+        
+        const updateRequest = store.put(word);
+        
+        updateRequest.onerror = (event) => {
+          console.error('Error updating word bookmark status in IndexedDB:', event.target.error);
+          reject(event.target.error);
+        };
+        
+        updateRequest.onsuccess = () => {
+          console.log(`Word bookmark status updated to ${bookmarked} in IndexedDB successfully`);
+          resolve(bookmarked);
+        };
+      }
+    };
+  });
+}
+
+// Get bookmark status for a word from IndexedDB
+function getWordBookmarkStatus(wordId) {
+  return new Promise((resolve, reject) => {
+    if (!db) {
+      reject(new Error('Database not initialized'));
+      return;
+    }
+    
+    const transaction = db.transaction([WORDS_STORE_NAME], 'readonly');
+    const store = transaction.objectStore(WORDS_STORE_NAME);
+    const request = store.get(wordId);
+    
+    request.onerror = (event) => {
+      console.error('Error getting word from IndexedDB:', event.target.error);
+      reject(event.target.error);
+    };
+    
+    request.onsuccess = () => {
+      const word = request.result;
+      
+      if (!word) {
+        // Word not found in database, so it's not bookmarked
+        resolve(false);
+      } else {
+        // Return the bookmark status (or false if not set)
+        resolve(word.bookmarked || false);
+      }
     };
   });
 }
@@ -157,42 +351,83 @@ chrome.notifications.onClicked.addListener(() => {
 });
 
 // Listen for messages from content scripts or popup
-chrome.runtime.onMessage.addListener(async (request, sender, sendResponse) => {
-  // Initialize DB if not already done
-  if (!db) {
-    try {
-      await initializeDB();
-    } catch (error) {
-      console.error('Failed to initialize database:', error);
-      sendResponse({ success: false, error: 'Failed to initialize database' });
-      return true;
+chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
+  // This pattern is crucial for async message handling in Chrome extensions
+  const handleAsyncMessage = async () => {
+    // Initialize DB if not already done
+    if (!db) {
+      try {
+        await initializeDB();
+      } catch (error) {
+        console.error('Failed to initialize database:', error);
+        return { success: false, error: 'Failed to initialize database' };
+      }
     }
-  }
-  
-  // Handle different message actions
-  if (request.action === 'addWordToDatabase') {
-    try {
-      await addWordToDatabase(request.word);
-      sendResponse({ success: true });
-    } catch (error) {
-      console.error('Error handling addWordToDatabase:', error);
-      sendResponse({ success: false, error: error.message });
+    
+    // Handle different message actions
+    if (request.action === 'addWordToDatabase') {
+      try {
+        await addWordToDatabase(request.word);
+        return { success: true };
+      } catch (error) {
+        console.error('Error handling addWordToDatabase:', error);
+        return { success: false, error: error.message };
+      }
     }
-    return true;
-  }
-  
-  if (request.action === 'getAllWords') {
-    try {
-      const words = await getAllWords();
-      sendResponse({ success: true, words });
-    } catch (error) {
-      console.error('Error handling getAllWords:', error);
-      sendResponse({ success: false, error: error.message });
+    
+    if (request.action === 'getAllWords') {
+      try {
+        const words = await getAllWords();
+        return { success: true, words };
+      } catch (error) {
+        console.error('Error handling getAllWords:', error);
+        return { success: false, error: error.message };
+      }
     }
-    return true;
-  }
+    
+    if (request.action === 'toggleWordBookmark') {
+      try {
+        const bookmarked = await toggleWordBookmark(request.wordId, request.bookmarked, request.wordData);
+        return { success: true, bookmarked };
+      } catch (error) {
+        console.error('Error handling toggleWordBookmark:', error);
+        return { success: false, error: error.message };
+      }
+    }
+    
+    if (request.action === 'getWordBookmarkStatus') {
+      try {
+        const bookmarked = await getWordBookmarkStatus(request.wordId);
+        return { success: true, bookmarked };
+      } catch (error) {
+        console.error('Error handling getWordBookmarkStatus:', error);
+        return { success: false, error: error.message };
+      }
+    }
+    
+    if (request.action === 'getBookmarkedWords') {
+      try {
+        const { start, limit, category } = request;
+        const result = await getBookmarkedWords(start, limit, category);
+        return { success: true, words: result.words, total: result.total };
+      } catch (error) {
+        console.error('Error handling getBookmarkedWords:', error);
+        return { success: false, error: error.message };
+      }
+    }
+    
+    return null; // Not handling this message
+  };
+
+  // Execute the async function and send response when it resolves
+  handleAsyncMessage().then(response => {
+    if (response !== null) {
+      sendResponse(response);
+    }
+  });
   
-  return false; // Not handling this message
+  // Return true to indicate that sendResponse will be called asynchronously
+  return true;
 });
 
 // When the extension starts up, initialize the DB
