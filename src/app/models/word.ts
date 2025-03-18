@@ -17,4 +17,6 @@ export interface IWord {
   verbForm: IWordVerbForm | null
   examples: IWordExample[]
   news: IWordNews[]
+  bookmarked?: boolean
+  categories?: string[] // Array of unique categories from all news items
 }

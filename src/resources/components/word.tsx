@@ -1,15 +1,53 @@
-import { Bookmark, Volume2 } from 'lucide-react'
+import { Bookmark, BookmarkCheck, Volume2 } from 'lucide-react'
 import { Badge } from '@/components/ui/badge.tsx'
 import { IWord } from '@/app/models/word'
-import { useCallback } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { IWordExample } from '@/app/models/word-example.ts'
 import { removePeriodFromEnd } from '@/lib/string.ts'
+import useStorageStore from '@/core/storage.ts'
 
 interface IWordProps {
   word: IWord | null
 }
 
 const Word = ({ word }: IWordProps) => {
+  const [isBookmarked, setIsBookmarked] = useState<boolean>(false)
+  const [isLoading, setIsLoading] = useState<boolean>(false)
+  const { getWordBookmarkStatus, toggleWordBookmark } = useStorageStore()
+
+  // Fetch bookmark status when word changes 
+  useEffect(() => {
+    if (word) {
+      setIsLoading(true)
+      getWordBookmarkStatus(word.id)
+        .then(bookmarked => {
+          setIsBookmarked(bookmarked)
+        })
+        .catch(error => {
+          console.error('Error getting bookmark status:', error)
+        })
+        .finally(() => {
+          setIsLoading(false)
+        })
+    }
+  }, [word])
+
+  const toggleBookmark = useCallback(() => {
+    if (!word) return
+    
+    setIsLoading(true)
+    toggleWordBookmark(word.id, !isBookmarked, word)
+      .then(newStatus => {
+        setIsBookmarked(newStatus)
+      })
+      .catch(error => {
+        console.error('Error toggling bookmark:', error)
+      })
+      .finally(() => {
+        setIsLoading(false)
+      })
+  }, [word, isBookmarked])
+  
   const playAudio = useCallback((audioId: string) => {
     if (!audioId) return
 
@@ -35,7 +73,19 @@ const Word = ({ word }: IWordProps) => {
       <div className='flex flex-col gap-2'>
         <div className='flex justify-between items-center'>
           <h2 className='text-primary text-4xl font-bold'>{word.word}</h2>
-          <Bookmark className='cursor-pointer text-muted-foreground' />
+          {isBookmarked ? (
+            <BookmarkCheck 
+              className='cursor-pointer text-primary' 
+              onClick={toggleBookmark}
+              style={{ opacity: isLoading ? 0.5 : 1 }}
+            />
+          ) : (
+            <Bookmark 
+              className='cursor-pointer text-muted-foreground' 
+              onClick={toggleBookmark}
+              style={{ opacity: isLoading ? 0.5 : 1 }}
+            />
+          )}
         </div>
         <div className='flex items-center gap-2'>
           <Volume2

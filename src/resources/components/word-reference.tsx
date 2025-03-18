@@ -31,10 +31,6 @@ const WordReference = ({ news }: IWordReferenceProps) => {
         <h4 className='text-lg font-bold'>{news.title}</h4>
 
         <div className='flex items-center gap-2'>
-          <span className='text-sm text-muted-foreground'>
-            {formatDateToDDMMYYYY(news.publishedAt)}
-          </span>
-          <span>•</span>
           <a
             href={news.sourceUrl}
             target='_blank'
@@ -42,6 +38,10 @@ const WordReference = ({ news }: IWordReferenceProps) => {
           >
             {getDomainFromUrl(news.sourceUrl)}
           </a>
+          <span>•</span>
+          <span className='text-sm text-muted-foreground'>
+            {formatDateToDDMMYYYY(news.publishedAt)}
+          </span>
         </div>
         <img
           src={news.imageUrl}
