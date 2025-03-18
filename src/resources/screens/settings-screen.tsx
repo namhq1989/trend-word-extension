@@ -5,20 +5,18 @@ import useDataControllerStore from '@/app/controllers/data-controller.ts'
 import { Button } from '@/components/ui/button.tsx'
 import { useEffect } from 'react'
 import {
-  ChevronRight,
+  Bell,
   Code,
   Gem,
   Hash,
   Heart,
   Info,
-  Languages,
   MessageSquareCode,
   MoonStar,
   Shell,
 } from 'lucide-react'
 import { Switch } from '@/components/ui/switch.tsx'
 import { useTheme } from '@/components/theme/theme.tsx'
-import { Sheet, SheetContent, SheetTrigger } from '@/components/ui/sheet'
 import {
   Select,
   SelectContent,
@@ -37,19 +35,71 @@ import {
 import { Input } from '@/components/ui/input.tsx'
 import { copyToClipboard } from '@/lib/string.ts'
 import useNotificationStore from '@/core/notification.ts'
+import { DifficultyLevel, NotificationFrequency } from '@/core/storage.ts'
 
 const SettingsScreen = () => {
   const { setTheme, theme } = useTheme()
-  const { categories, getCategories, toggleCategory } = useDataControllerStore()
+  const {
+    categories,
+    getCategories,
+    toggleCategory,
+    difficultyLevel,
+    getDifficultyLevel,
+    setDifficultyLevel,
+    notificationFrequency,
+    getNotificationFrequency,
+    setNotificationFrequency,
+    maxWordsPerDay,
+    getMaxWordsPerDay,
+    setMaxWordsPerDay,
+  } = useDataControllerStore()
   const { showSuccessNotification } = useNotificationStore()
 
   useEffect(() => {
     const fetchData = async () => {
       await getCategories()
+      await getDifficultyLevel()
+      await getNotificationFrequency()
+      await getMaxWordsPerDay()
     }
 
     fetchData().then()
-  }, [getCategories])
+  }, [
+    getCategories,
+    getDifficultyLevel,
+    getNotificationFrequency,
+    getMaxWordsPerDay,
+  ])
+
+  const handleLevelChange = (value: string) => {
+    setDifficultyLevel(value as DifficultyLevel).then()
+    showSuccessNotification({
+      description: `Difficulty level set to ${value}`,
+    })
+  }
+
+  const handleNotificationFrequencyChange = (value: string) => {
+    setNotificationFrequency(value as NotificationFrequency).then()
+
+    let message = 'Notifications disabled'
+    if (value !== '-') {
+      message = `Notifications will be sent every ${value} hour${value !== '1' ? 's' : ''}`
+    }
+
+    showSuccessNotification({
+      description: message,
+    })
+  }
+
+  const handleMaxWordsChange = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const value = parseInt(event.target.value)
+    if (isNaN(value) || value < 5) return
+
+    setMaxWordsPerDay(value).then()
+    showSuccessNotification({
+      description: `Max words per day set to ${value}`,
+    })
+  }
 
   return (
     <div className='flex flex-col w-[400px] min-h-[600px] scrollbar-hide'>
@@ -110,7 +160,7 @@ const SettingsScreen = () => {
                   </Tooltip>
                 </TooltipProvider>
               </div>
-              <Select>
+              <Select value={difficultyLevel} onValueChange={handleLevelChange}>
                 <SelectTrigger className='w-[140px]'>
                   <SelectValue placeholder='Select a level' />
                 </SelectTrigger>
@@ -131,10 +181,36 @@ const SettingsScreen = () => {
               </div>
               <Input
                 type='number'
-                defaultValue={10}
+                value={maxWordsPerDay}
+                onChange={handleMaxWordsChange}
                 min={5}
                 className='w-[140px]'
               />
+            </div>
+            <div className='flex bg-container p-4 justify-between items-center'>
+              <div className='flex flex-row gap-2 items-center justify-center'>
+                <Bell size={20} className='text-muted-foreground' />
+                <p className='text-sm text-foreground'>
+                  Notification frequency
+                </p>
+              </div>
+              <Select
+                value={notificationFrequency}
+                onValueChange={handleNotificationFrequencyChange}
+              >
+                <SelectTrigger className='w-[140px]'>
+                  <SelectValue placeholder='Select frequency' />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectGroup>
+                    <SelectLabel>Receive notifications</SelectLabel>
+                    <SelectItem value='1'>Every 1h</SelectItem>
+                    <SelectItem value='2'>Every 2h</SelectItem>
+                    <SelectItem value='3'>Every 3h</SelectItem>
+                    <SelectItem value='-'>Never</SelectItem>
+                  </SelectGroup>
+                </SelectContent>
+              </Select>
             </div>
           </div>
         </div>
@@ -171,19 +247,19 @@ const SettingsScreen = () => {
                 <p className='text-sm text-foreground'>Dark mode</p>
               </div>
               <Switch
-                defaultChecked={theme === 'dark'}
+                checked={theme === 'dark'}
                 onCheckedChange={(checked) => {
                   setTheme(checked ? 'dark' : 'light')
                 }}
               />
             </div>
-            <div className='flex bg-container p-4 justify-between items-center'>
-              <div className='flex flex-row gap-2 items-center justify-center'>
-                <Languages size={20} className='text-muted-foreground' />
-                <p className='text-sm text-foreground'>Translate to</p>
-              </div>
-              <TranslateToSheet />
-            </div>
+            {/*<div className='flex bg-container p-4 justify-between items-center'>*/}
+            {/*  <div className='flex flex-row gap-2 items-center justify-center'>*/}
+            {/*    <Languages size={20} className='text-muted-foreground' />*/}
+            {/*    <p className='text-sm text-foreground'>Translate to</p>*/}
+            {/*  </div>*/}
+            {/*  <TranslateToSheet />*/}
+            {/*</div>*/}
           </div>
         </div>
 
@@ -215,67 +291,6 @@ const SettingsScreen = () => {
         </div>
       </div>
     </div>
-  )
-}
-
-const TranslateToSheet = () => {
-  const { languages, getLanguages, setLanguage } = useDataControllerStore()
-
-  useEffect(() => {
-    const fetchData = async () => {
-      await getLanguages()
-    }
-
-    fetchData().then()
-  }, [getLanguages])
-
-  if (!languages.length) {
-    return null
-  }
-
-  let selectedLanguage = languages.find((language) => language.isSelected)
-  if (!selectedLanguage) {
-    selectedLanguage = languages[0]
-  }
-
-  return (
-    <Sheet>
-      <SheetTrigger asChild>
-        <div className='flex flex-row gap-2 items-center justify-center cursor-pointer'>
-          <p className='text-sm text-foreground'>{selectedLanguage.name}</p>
-          <ChevronRight size={20} className='text-muted-foreground' />
-        </div>
-      </SheetTrigger>
-      <SheetContent
-        side='bottom'
-        className='rounded-t-xl h-[400px] overflow-auto'
-      >
-        <div className='flex flex-col gap-8 p-4 mt-16'>
-          <div className='flex flex-col gap-1'>
-            <p className='text-lg'>Select Translation Language</p>
-            <p className='text-sm text-muted-foreground'>
-              Choose the language you want to translate your English content
-              into
-            </p>
-          </div>
-          <div className='flex flex-col gap-2'>
-            {languages.map((language) => (
-              <div key={language.id}>
-                <Button
-                  variant={
-                    language.id === selectedLanguage.id ? 'default' : 'outline'
-                  }
-                  className='w-full h-10 cursor-pointer justify-start text-sm'
-                  onClick={() => setLanguage(language.id)}
-                >
-                  {language.name}
-                </Button>
-              </div>
-            ))}
-          </div>
-        </div>
-      </SheetContent>
-    </Sheet>
   )
 }
 

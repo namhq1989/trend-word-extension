@@ -1,8 +1,9 @@
 import useHttpStore from '@/core/http.ts'
 import { IWord } from '@/app/models/word.ts'
+import { DifficultyLevel } from '@/core/storage.ts'
 
 export interface INewWordApiRequest {
-  level?: string
+  level?: DifficultyLevel
   categories?: string[]
 }
 

@@ -1,6 +1,6 @@
 import categories, { ICategory } from '@/app/models/category.ts'
 import { create } from 'zustand/react'
-import useStorageStore from '@/core/storage.ts'
+import useStorageStore, { DifficultyLevel, NotificationFrequency } from '@/core/storage.ts'
 import languages, { Language } from '@/app/models/language.ts'
 
 interface IDataController {
@@ -11,6 +11,18 @@ interface IDataController {
   categories: ICategory[]
   getCategories: () => Promise<void>
   toggleCategory: (id: string) => Promise<void>
+  
+  difficultyLevel: DifficultyLevel
+  getDifficultyLevel: () => Promise<void>
+  setDifficultyLevel: (level: DifficultyLevel) => Promise<void>
+  
+  notificationFrequency: NotificationFrequency
+  getNotificationFrequency: () => Promise<void>
+  setNotificationFrequency: (frequency: NotificationFrequency) => Promise<void>
+  
+  maxWordsPerDay: number
+  getMaxWordsPerDay: () => Promise<void>
+  setMaxWordsPerDay: (count: number) => Promise<void>
 }
 
 const useDataControllerStore = create<IDataController>((set) => ({
@@ -61,6 +73,42 @@ const useDataControllerStore = create<IDataController>((set) => ({
     })
     set({ categories: result })
   },
+  
+  difficultyLevel: 'beginner',
+  getDifficultyLevel: async () => {
+    const storage = useStorageStore.getState()
+    const level = await storage.getDifficultyLevel()
+    set({ difficultyLevel: level })
+  },
+  setDifficultyLevel: async (level: DifficultyLevel) => {
+    const storage = useStorageStore.getState()
+    await storage.saveDifficultyLevel(level)
+    set({ difficultyLevel: level })
+  },
+  
+  notificationFrequency: '1',
+  getNotificationFrequency: async () => {
+    const storage = useStorageStore.getState()
+    const frequency = await storage.getNotificationFrequency()
+    set({ notificationFrequency: frequency })
+  },
+  setNotificationFrequency: async (frequency: NotificationFrequency) => {
+    const storage = useStorageStore.getState()
+    await storage.saveNotificationFrequency(frequency)
+    set({ notificationFrequency: frequency })
+  },
+  
+  maxWordsPerDay: 10,
+  getMaxWordsPerDay: async () => {
+    const storage = useStorageStore.getState()
+    const count = await storage.getMaxWordsPerDay()
+    set({ maxWordsPerDay: count })
+  },
+  setMaxWordsPerDay: async (count: number) => {
+    const storage = useStorageStore.getState()
+    await storage.saveMaxWordsPerDay(count)
+    set({ maxWordsPerDay: count })
+  }
 }))
 
 export default useDataControllerStore

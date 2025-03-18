@@ -28,6 +28,7 @@ const kyInstance = ky.create({
   headers: {
     'Content-Type': 'application/json',
   },
+  retry: 1,
   timeout: 30000,
   hooks: {
     beforeRequest: [
