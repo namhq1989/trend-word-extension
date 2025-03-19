@@ -4,52 +4,16 @@ import { Separator } from '@/components/ui/separator.tsx'
 import { goTo } from 'react-chrome-extension-router'
 import WordDetailScreen from '@/resources/screens/word-detail-screen.tsx'
 import { IWord } from '@/app/models/word.ts'
-import { useCallback, useEffect, useState } from 'react'
-import useStorageStore from '@/core/storage.ts'
 import { capitalizeString } from '@/lib/string'
 import { formatDateToDDMMYYYY } from '@/lib/date'
+import { useWordBookmark } from './hooks/useWordBookmark'
 
 interface WordListItemProps {
   word: IWord
 }
 
 const WordListItem = ({ word }: WordListItemProps) => {
-  const [isBookmarked, setIsBookmarked] = useState<boolean>(false)
-  const [isLoading, setIsLoading] = useState<boolean>(false)
-  const { getWordBookmarkStatus, toggleWordBookmark } = useStorageStore()
-
-  // Fetch bookmark status when word changes 
-  useEffect(() => {
-    if (word) {
-      setIsLoading(true)
-      getWordBookmarkStatus(word.id)
-        .then(bookmarked => {
-          setIsBookmarked(bookmarked)
-        })
-        .catch(error => {
-          console.error('Error getting bookmark status:', error)
-        })
-        .finally(() => {
-          setIsLoading(false)
-        })
-    }
-  }, [word])
-
-  const toggleBookmark = useCallback(() => {
-    if (!word) return
-    
-    setIsLoading(true)
-    toggleWordBookmark(word.id, !isBookmarked, word)
-      .then(newStatus => {
-        setIsBookmarked(newStatus)
-      })
-      .catch(error => {
-        console.error('Error toggling bookmark:', error)
-      })
-      .finally(() => {
-        setIsLoading(false)
-      })
-  }, [word, isBookmarked])
+  const { isBookmarked, isLoading, toggleBookmark } = useWordBookmark(word.id, word)
 
   return (
     <div className='flex flex-col bg-container p-4 gap-2'>
