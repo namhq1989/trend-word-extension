@@ -4,14 +4,7 @@ import SectionTitle from '@/resources/components/section-title.tsx'
 import useDataControllerStore from '@/app/controllers/data-controller.ts'
 import { Button } from '@/components/ui/button.tsx'
 import { ChangeEvent, useEffect } from 'react'
-import {
-  Bell,
-  Hash,
-  Heart,
-  Info,
-  MessageSquareCode,
-  MoonStar,
-} from 'lucide-react'
+import { Bell, Hash, Heart, Info, MoonStar } from 'lucide-react'
 import { Switch } from '@/components/ui/switch.tsx'
 import { useTheme } from '@/components/theme/theme.tsx'
 import {
@@ -92,6 +85,13 @@ const SettingsScreen = () => {
     showSuccessNotification({
       description: `Max words per day set to ${value}`,
     })
+  }
+
+  const openBapBiUrl = () => {
+    window.open(
+      'https://chromewebstore.google.com/detail/bapbi-productivity-relaxa/ahpbddfeddnminklkodiapofdddmcmlb',
+      '_blank',
+    )
   }
 
   // Check if any difficulty levels are selected
@@ -317,15 +317,39 @@ const SettingsScreen = () => {
               <p className='text-sm'>Version</p>
               <p className='text-sm'>1.0.0</p>
             </div>
-            <div className='flex flex-col gap-4 mt-4 px-2'>
-              <div className='flex gap-2 items-center cursor-pointer'>
-                <MessageSquareCode size={16} className='text-primary' />
-                <span className='text-sm text-primary'>Send feedback</span>
-              </div>
+            <div className='flex flex-col gap-4 mt-2 px-2'>
+              {/*<div className='flex gap-2 items-center cursor-pointer'>*/}
+              {/*  <MessageSquareCode size={16} className='text-primary' />*/}
+              {/*  <span className='text-sm text-primary'>Send feedback</span>*/}
+              {/*</div>*/}
               <div className='flex gap-2 items-center cursor-pointer'>
                 <Heart size={16} className='text-primary' />
                 <span className='text-sm text-primary'>Rate extension</span>
               </div>
+            </div>
+          </div>
+        </div>
+
+        {/*More by Developer - BapBi app*/}
+        <div className='flex flex-col gap-2'>
+          <SectionTitle title='More by Developer' />
+          <div
+            className='flex bg-container p-4 gap-4 items-center cursor-pointer'
+            onClick={openBapBiUrl}
+          >
+            <img
+              src='https://i.bapbi.app/logo.png'
+              alt='BapBi Logo'
+              className='w-10 h-10 rounded-lg'
+            />
+            <div className='flex flex-col'>
+              <p className='text-sm font-bold'>
+                BapBi - Productivity & Relaxation Hub
+              </p>
+              <p className='text-sm text-muted-foreground'>
+                An app designed to boost your productivity and bring relaxation
+                to your day!
+              </p>
             </div>
           </div>
         </div>
