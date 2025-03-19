@@ -5,4 +5,4 @@ tasks:
   run:
     dotenv: ['.env']
     cmds:
-      - pnpm dev
+      - rm -rf dist && pnpm dev
