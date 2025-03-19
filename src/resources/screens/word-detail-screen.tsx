@@ -33,7 +33,7 @@ const WordDetailScreen = ({ word }: WordDetailScreenProps) => {
         <div className='px-4'>
           <Separator />
         </div>
-        <SimilarWords />
+        <SimilarWords word={word} />
       </div>
     </div>
   )
