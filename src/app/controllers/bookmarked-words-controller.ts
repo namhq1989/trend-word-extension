@@ -9,11 +9,13 @@ interface IBookmarkedWordsController {
   hasMore: boolean
   isLoading: boolean
   selectedCategory: string
+  isBookmarkedOnly: boolean
   
   // Actions
-  fetchBookmarkedWords: (page?: number, category?: string) => Promise<void>
+  fetchBookmarkedWords: (page?: number, category?: string, bookmarkedOnly?: boolean) => Promise<void>
   loadMore: () => Promise<void>
   setCategory: (category: string) => void
+  setBookmarkedOnly: (bookmarkedOnly: boolean) => void
   reset: () => void
 }
 
@@ -25,8 +27,9 @@ const useBookmarkedWordsController = create<IBookmarkedWordsController>((set, ge
   hasMore: false,
   isLoading: false,
   selectedCategory: 'all',
+  isBookmarkedOnly: false,
   
-  fetchBookmarkedWords: async (page = 1, category = 'all') => {
+  fetchBookmarkedWords: async (page = 1, category = 'all', bookmarkedOnly = false) => {
     set({ isLoading: true });
     
     try {
@@ -35,11 +38,12 @@ const useBookmarkedWordsController = create<IBookmarkedWordsController>((set, ge
       const start = (page - 1) * pageSize;
       const limit = pageSize;
       
-      // Send message to background script to get bookmarked words
+      // Send message to background script to get words
+      const action = bookmarkedOnly ? 'getBookmarkedWords' : 'getWords';
       const response = await new Promise<{success: boolean, words: IWord[], total: number}>((resolve, reject) => {
         chrome.runtime.sendMessage(
           {
-            action: 'getBookmarkedWords',
+            action,
             start,
             limit,
             category: category !== 'all' ? category : undefined
@@ -73,20 +77,27 @@ const useBookmarkedWordsController = create<IBookmarkedWordsController>((set, ge
         }));
       }
     } catch (error) {
-      console.error('Error fetching bookmarked words:', error);
+      console.error('Error fetching words:', error);
     } finally {
       set({ isLoading: false });
     }
   },
   
   loadMore: async () => {
-    const { currentPage, selectedCategory } = get();
-    await get().fetchBookmarkedWords(currentPage + 1, selectedCategory);
+    const { currentPage, selectedCategory, isBookmarkedOnly } = get();
+    await get().fetchBookmarkedWords(currentPage + 1, selectedCategory, isBookmarkedOnly);
   },
   
   setCategory: (category: string) => {
     set({ selectedCategory: category });
-    get().fetchBookmarkedWords(1, category);
+    const { isBookmarkedOnly } = get();
+    get().fetchBookmarkedWords(1, category, isBookmarkedOnly);
+  },
+  
+  setBookmarkedOnly: (bookmarkedOnly: boolean) => {
+    set({ isBookmarkedOnly: bookmarkedOnly });
+    const { selectedCategory } = get();
+    get().fetchBookmarkedWords(1, selectedCategory, bookmarkedOnly);
   },
   
   reset: () => {
@@ -96,7 +107,8 @@ const useBookmarkedWordsController = create<IBookmarkedWordsController>((set, ge
       currentPage: 1,
       hasMore: false,
       isLoading: false,
-      selectedCategory: 'all'
+      selectedCategory: 'all',
+      isBookmarkedOnly: false
     });
   }
 }));

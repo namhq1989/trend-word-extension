@@ -130,6 +130,64 @@ function getAllWords() {
   });
 }
 
+// Get words with pagination and category filtering
+function getWords(start = 0, limit = 10, category) {
+  return new Promise((resolve, reject) => {
+    if (!db) {
+      reject(new Error('Database not initialized'));
+      return;
+    }
+    
+    const transaction = db.transaction([WORDS_STORE_NAME], 'readonly');
+    const store = transaction.objectStore(WORDS_STORE_NAME);
+    const request = store.getAll();
+    
+    request.onerror = (event) => {
+      console.error('Error getting words from IndexedDB:', event.target.error);
+      reject(event.target.error);
+    };
+    
+    request.onsuccess = () => {
+      let allWords = request.result;
+      
+      // Apply category filter if specified
+      if (category) {
+        allWords = allWords.filter(word => {
+          // Check if the word has categories array
+          if (word.categories && Array.isArray(word.categories)) {
+            return word.categories.includes(category);
+          }
+          // Fallback to checking news items directly if categories array is not available
+          else if (word.news && Array.isArray(word.news)) {
+            return word.news.some(newsItem => newsItem.category === category);
+          }
+          // Legacy support for old word.category property
+          else if (word.category) {
+            return word.category === category;
+          }
+          return false;
+        });
+      }
+      
+      // Sort by date (newest first)
+      allWords.sort((a, b) => {
+        const dateA = new Date(a.date || 0);
+        const dateB = new Date(b.date || 0);
+        return dateB - dateA;
+      });
+      
+      // Get total count before pagination
+      const total = allWords.length;
+      
+      // Apply pagination
+      const paginatedWords = allWords.slice(start, start + limit);
+      
+      console.log(`Retrieved ${paginatedWords.length} words from IndexedDB (total: ${total})`);
+      resolve({ words: paginatedWords, total });
+    };
+  });
+}
+
 // Get bookmarked words from IndexedDB with pagination and category filtering
 function getBookmarkedWords(start = 0, limit = 10, category) {
   return new Promise((resolve, reject) => {
@@ -420,6 +478,17 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
         return { success: true, words };
       } catch (error) {
         console.error('Error handling getAllWords:', error);
+        return { success: false, error: error.message };
+      }
+    }
+    
+    if (request.action === 'getWords') {
+      try {
+        const { start, limit, category } = request;
+        const result = await getWords(start, limit, category);
+        return { success: true, words: result.words, total: result.total };
+      } catch (error) {
+        console.error('Error handling getWords:', error);
         return { success: false, error: error.message };
       }
     }
