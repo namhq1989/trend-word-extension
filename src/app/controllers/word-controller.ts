@@ -2,7 +2,7 @@ import { IWord } from '@/app/models/word.ts'
 import { create } from 'zustand/react'
 import { fetchNewWordApi } from '@/app/networking/word-api.ts'
 import useDataControllerStore from '@/app/controllers/data-controller.ts'
-import useStorageStore, { NotificationFrequency } from '@/core/storage.ts'
+import useStorageStore, { DifficultyLevel, NotificationFrequency } from '@/core/storage.ts'
 
 interface IWordController {
   newWord: IWord | null
@@ -60,6 +60,7 @@ const useWordControllerStore = create<IWordController>((set) => ({
       const {
         getCategories,
         getDifficultyLevel,
+        getSelectedDifficultyLevels,
         getNotificationFrequency,
         getMaxWordsPerDay,
       } = useDataControllerStore.getState()
@@ -67,12 +68,14 @@ const useWordControllerStore = create<IWordController>((set) => ({
       // Load settings from storage
       await getCategories()
       await getDifficultyLevel()
+      await getSelectedDifficultyLevels()
       await getNotificationFrequency()
       await getMaxWordsPerDay()
 
       const {
         categories,
         difficultyLevel,
+        difficultyLevels,
         notificationFrequency,
         maxWordsPerDay,
       } = useDataControllerStore.getState()
@@ -155,13 +158,24 @@ const useWordControllerStore = create<IWordController>((set) => ({
 
       console.log('Categories available for fetch:', categoriesToFetch)
 
+      // Get selected difficulty levels
+      const selectedLevels = difficultyLevels
+        .filter(level => level.isSelected)
+        .map(level => level.id)
+
+      // If no levels are selected, use all levels
+      const allLevels: DifficultyLevel[] = ['beginner', 'intermediate', 'advanced']
+      const levelsToUse = selectedLevels.length > 0 ? selectedLevels : allLevels
+
+      console.log('Using difficulty levels:', levelsToUse)
+
       // Fetch word from API
       let word: IWord | null = null
 
       try {
         word = await fetchNewWordApi({
           categories: categoriesToFetch, // Send all available categories, not just one
-          level: difficultyLevel,
+          levels: levelsToUse, // Use the selected difficulty levels
         })
 
         // Only increment the counter when we successfully get a word from the API
