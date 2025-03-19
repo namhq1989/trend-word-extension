@@ -34,6 +34,9 @@ interface IStorage {
   saveDifficultyLevel: (level: DifficultyLevel) => Promise<void>
   getDifficultyLevel: () => Promise<DifficultyLevel>
 
+  saveSelectedDifficultyLevels: (levels: DifficultyLevel[]) => Promise<void>
+  getSelectedDifficultyLevels: () => Promise<DifficultyLevel[]>
+
   saveNotificationFrequency: (frequency: NotificationFrequency) => Promise<void>
   getNotificationFrequency: () => Promise<NotificationFrequency>
 
@@ -169,6 +172,31 @@ const useStorageStore = create<IStorage>((_, get) => ({
           reject('beginner' as DifficultyLevel)
         } else {
           resolve((result.difficultyLevel || 'beginner') as DifficultyLevel)
+        }
+      })
+    })
+  },
+
+  saveSelectedDifficultyLevels: (levels: DifficultyLevel[]) => {
+    return new Promise<void>((resolve, reject) => {
+      chrome.storage.local.set({ selectedDifficultyLevels: levels }, () => {
+        if (chrome.runtime.lastError) {
+          reject()
+        } else {
+          resolve()
+        }
+      })
+    })
+  },
+
+  getSelectedDifficultyLevels: () => {
+    return new Promise<DifficultyLevel[]>((resolve, reject) => {
+      chrome.storage.local.get('selectedDifficultyLevels', (result) => {
+        if (chrome.runtime.lastError) {
+          reject([])
+        } else {
+          // If no levels are stored yet, return an empty array
+          resolve(result.selectedDifficultyLevels || [])
         }
       })
     })

@@ -3,7 +3,7 @@ import { IWord } from '@/app/models/word.ts'
 import { DifficultyLevel } from '@/core/storage.ts'
 
 export interface INewWordApiRequest {
-  level?: DifficultyLevel
+  levels?: DifficultyLevel[]
   categories?: string[]
 }
 

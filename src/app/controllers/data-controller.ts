@@ -16,6 +16,10 @@ interface IDataController {
   getDifficultyLevel: () => Promise<void>
   setDifficultyLevel: (level: DifficultyLevel) => Promise<void>
   
+  difficultyLevels: { id: DifficultyLevel; name: string; isSelected: boolean }[]
+  getSelectedDifficultyLevels: () => Promise<void>
+  toggleDifficultyLevel: (id: DifficultyLevel) => Promise<void>
+  
   notificationFrequency: NotificationFrequency
   getNotificationFrequency: () => Promise<void>
   setNotificationFrequency: (frequency: NotificationFrequency) => Promise<void>
@@ -24,6 +28,13 @@ interface IDataController {
   getMaxWordsPerDay: () => Promise<void>
   setMaxWordsPerDay: (count: number) => Promise<void>
 }
+
+// Define the available difficulty levels
+const difficultyLevelOptions = [
+  { id: 'beginner' as DifficultyLevel, name: 'Beginner', isSelected: false },
+  { id: 'intermediate' as DifficultyLevel, name: 'Intermediate', isSelected: false },
+  { id: 'advanced' as DifficultyLevel, name: 'Advanced', isSelected: false }
+]
 
 const useDataControllerStore = create<IDataController>((set) => ({
   languages: [],
@@ -84,6 +95,62 @@ const useDataControllerStore = create<IDataController>((set) => ({
     const storage = useStorageStore.getState()
     await storage.saveDifficultyLevel(level)
     set({ difficultyLevel: level })
+  },
+  
+  difficultyLevels: difficultyLevelOptions,
+  getSelectedDifficultyLevels: async () => {
+    const storage = useStorageStore.getState()
+    const selectedLevels = await storage.getSelectedDifficultyLevels()
+    
+    // If no levels are selected yet, we'll try to use the single level from the old setting
+    if (selectedLevels.length === 0) {
+      const singleLevel = await storage.getDifficultyLevel()
+      if (singleLevel) {
+        await storage.saveSelectedDifficultyLevels([singleLevel])
+        const updatedLevels = difficultyLevelOptions.map((level) => ({
+          ...level,
+          isSelected: level.id === singleLevel
+        }))
+        set({ difficultyLevels: updatedLevels })
+        return
+      }
+    }
+    
+    const updatedLevels = difficultyLevelOptions.map((level) => ({
+      ...level,
+      isSelected: selectedLevels.includes(level.id)
+    }))
+    
+    set({ difficultyLevels: updatedLevels })
+  },
+  
+  toggleDifficultyLevel: async (id: DifficultyLevel) => {
+    const storage = useStorageStore.getState()
+    const selectedLevels = await storage.getSelectedDifficultyLevels()
+    
+    if (selectedLevels.includes(id)) {
+      // Allow removing any level, even if it results in no levels being selected
+      const newLevels = selectedLevels.filter(level => level !== id)
+      await storage.saveSelectedDifficultyLevels(newLevels)
+      
+      const updatedLevels = difficultyLevelOptions.map((level) => ({
+        ...level,
+        isSelected: newLevels.includes(level.id)
+      }))
+      
+      set({ difficultyLevels: updatedLevels })
+    } else {
+      // Add the level
+      const newLevels = [...selectedLevels, id]
+      await storage.saveSelectedDifficultyLevels(newLevels)
+      
+      const updatedLevels = difficultyLevelOptions.map((level) => ({
+        ...level,
+        isSelected: newLevels.includes(level.id)
+      }))
+      
+      set({ difficultyLevels: updatedLevels })
+    }
   },
   
   notificationFrequency: '1',

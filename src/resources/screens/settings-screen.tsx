@@ -3,10 +3,9 @@ import HeaderTitle from '@/resources/components/header-title.tsx'
 import SectionTitle from '@/resources/components/section-title.tsx'
 import useDataControllerStore from '@/app/controllers/data-controller.ts'
 import { Button } from '@/components/ui/button.tsx'
-import { useEffect } from 'react'
+import { ChangeEvent, useEffect } from 'react'
 import {
   Bell,
-  Code,
   Hash,
   Heart,
   Info,
@@ -40,9 +39,9 @@ const SettingsScreen = () => {
     categories,
     getCategories,
     toggleCategory,
-    difficultyLevel,
-    getDifficultyLevel,
-    setDifficultyLevel,
+    difficultyLevels,
+    getSelectedDifficultyLevels,
+    toggleDifficultyLevel,
     notificationFrequency,
     getNotificationFrequency,
     setNotificationFrequency,
@@ -55,7 +54,7 @@ const SettingsScreen = () => {
   useEffect(() => {
     const fetchData = async () => {
       await getCategories()
-      await getDifficultyLevel()
+      await getSelectedDifficultyLevels()
       await getNotificationFrequency()
       await getMaxWordsPerDay()
     }
@@ -63,16 +62,13 @@ const SettingsScreen = () => {
     fetchData().then()
   }, [
     getCategories,
-    getDifficultyLevel,
+    getSelectedDifficultyLevels,
     getNotificationFrequency,
     getMaxWordsPerDay,
   ])
 
-  const handleLevelChange = (value: string) => {
-    setDifficultyLevel(value as DifficultyLevel).then()
-    showSuccessNotification({
-      description: `Difficulty level set to ${value}`,
-    })
+  const handleDifficultyLevelToggle = (id: DifficultyLevel) => {
+    toggleDifficultyLevel(id).then()
   }
 
   const handleNotificationFrequencyChange = (value: string) => {
@@ -88,7 +84,7 @@ const SettingsScreen = () => {
     })
   }
 
-  const handleMaxWordsChange = (event: React.ChangeEvent<HTMLInputElement>) => {
+  const handleMaxWordsChange = (event: ChangeEvent<HTMLInputElement>) => {
     const value = parseInt(event.target.value)
     if (isNaN(value) || value < 5) return
 
@@ -97,6 +93,9 @@ const SettingsScreen = () => {
       description: `Max words per day set to ${value}`,
     })
   }
+
+  // Check if any difficulty levels are selected
+  const hasSelectedLevels = difficultyLevels.some((level) => level.isSelected)
 
   return (
     <div className='flex flex-col w-[400px] min-h-[600px] scrollbar-hide'>
@@ -139,38 +138,39 @@ const SettingsScreen = () => {
         <div className='flex flex-col gap-2'>
           <SectionTitle title='Customization' />
           <div className='flex flex-col gap-2'>
-            <div className='flex bg-container p-4 justify-between items-center'>
-              <div className='flex flex-row gap-2 items-center justify-center'>
-                <Code size={20} className='text-muted-foreground' />
-                <p className='text-sm text-foreground'>Difficulty level</p>
-                <TooltipProvider>
-                  <Tooltip>
-                    <TooltipTrigger asChild>
-                      <Info size={16} className='text-muted-foreground' />
-                    </TooltipTrigger>
-                    <TooltipContent className='w-[250px] p-4'>
-                      <p className='text-sm'>
-                        Higher difficulty levels include words from all previous
-                        levels, expanding your vocabulary range as you progress
-                      </p>
-                    </TooltipContent>
-                  </Tooltip>
-                </TooltipProvider>
-              </div>
-              <Select value={difficultyLevel} onValueChange={handleLevelChange}>
-                <SelectTrigger className='w-[140px]'>
-                  <SelectValue placeholder='Select a level' />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectGroup>
-                    <SelectLabel>Level</SelectLabel>
-                    <SelectItem value='beginner'>Beginner</SelectItem>
-                    <SelectItem value='intermediate'>Intermediate</SelectItem>
-                    <SelectItem value='advanced'>Advanced</SelectItem>
-                  </SelectGroup>
-                </SelectContent>
-              </Select>
-            </div>
+            {/* Legacy Difficulty Level Dropdown - keeping for backward compatibility */}
+            {/*<div className='flex bg-container p-4 justify-between items-center'>*/}
+            {/*  <div className='flex flex-row gap-2 items-center justify-center'>*/}
+            {/*    <Code size={20} className='text-muted-foreground' />*/}
+            {/*    <p className='text-sm text-foreground'>Default level</p>*/}
+            {/*    <TooltipProvider>*/}
+            {/*      <Tooltip>*/}
+            {/*        <TooltipTrigger asChild>*/}
+            {/*          <Info size={16} className='text-muted-foreground' />*/}
+            {/*        </TooltipTrigger>*/}
+            {/*        <TooltipContent className='w-[250px] p-4'>*/}
+            {/*          <p className='text-sm'>*/}
+            {/*            Legacy setting. Use the multi-select above instead.*/}
+            {/*          </p>*/}
+            {/*        </TooltipContent>*/}
+            {/*      </Tooltip>*/}
+            {/*    </TooltipProvider>*/}
+            {/*  </div>*/}
+            {/*  <Select value={difficultyLevel} onValueChange={handleLevelChange}>*/}
+            {/*    <SelectTrigger className='w-[140px]'>*/}
+            {/*      <SelectValue placeholder='Select a level' />*/}
+            {/*    </SelectTrigger>*/}
+            {/*    <SelectContent>*/}
+            {/*      <SelectGroup>*/}
+            {/*        <SelectLabel>Level</SelectLabel>*/}
+            {/*        <SelectItem value='beginner'>Beginner</SelectItem>*/}
+            {/*        <SelectItem value='intermediate'>Intermediate</SelectItem>*/}
+            {/*        <SelectItem value='advanced'>Advanced</SelectItem>*/}
+            {/*      </SelectGroup>*/}
+            {/*    </SelectContent>*/}
+            {/*  </Select>*/}
+            {/*</div>*/}
+
             <div className='flex bg-container p-4 justify-between items-center'>
               <div className='flex flex-row gap-2 items-center justify-center'>
                 <Hash size={20} className='text-muted-foreground' />
@@ -211,6 +211,49 @@ const SettingsScreen = () => {
             </div>
           </div>
         </div>
+        {/* Difficulty Levels */}
+        <div className='flex flex-col gap-2'>
+          <div className='flex flex-row justify-between items-center'>
+            <SectionTitle title='Difficulty Levels' />
+            <TooltipProvider>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Info
+                    size={16}
+                    className='text-muted-foreground cursor-pointer'
+                  />
+                </TooltipTrigger>
+                <TooltipContent className='w-[200px] p-4 mr-4'>
+                  <p className='text-sm'>
+                    Select which difficulty levels you want to receive words
+                    from
+                    {!hasSelectedLevels &&
+                      '. Currently, no levels are selected, which means words from all levels will be shown'}
+                  </p>
+                </TooltipContent>
+              </Tooltip>
+            </TooltipProvider>
+          </div>
+          <div className='grid grid-cols-3 gap-2'>
+            {difficultyLevels.length === 0 && (
+              <div className='col-span-3 flex items-center justify-center'>
+                <p className='text-sm text-muted-foreground'>No levels</p>
+              </div>
+            )}
+            {difficultyLevels.map((level) => (
+              <div key={level.id} className='h-10'>
+                <Button
+                  variant={level.isSelected ? 'default' : 'outline'}
+                  className='w-full h-full cursor-pointer justify-start text-xs'
+                  onClick={() => handleDifficultyLevelToggle(level.id)}
+                >
+                  {level.name}
+                </Button>
+              </div>
+            ))}
+          </div>
+        </div>
+
         {/*Categories*/}
         <div className='flex flex-col gap-2'>
           <SectionTitle title='Categories' />
