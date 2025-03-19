@@ -6,14 +6,17 @@ import WordDetailScreen from '@/resources/screens/word-detail-screen.tsx'
 import { IWord } from '@/app/models/word.ts'
 import { capitalizeString } from '@/lib/string'
 import { formatDateToDDMMYYYY } from '@/lib/date'
-import { useWordBookmark } from './hooks/useWordBookmark'
+import { useWordBookmark } from './hooks/use-word-bookmark.ts'
 
 interface WordListItemProps {
   word: IWord
 }
 
 const WordListItem = ({ word }: WordListItemProps) => {
-  const { isBookmarked, isLoading, toggleBookmark } = useWordBookmark(word.id, word)
+  const { isBookmarked, isLoading, toggleBookmark } = useWordBookmark(
+    word.id,
+    word,
+  )
 
   return (
     <div className='flex flex-col bg-container p-4 gap-2'>
@@ -27,16 +30,16 @@ const WordListItem = ({ word }: WordListItemProps) => {
           {word.word}
         </h2>
         {isBookmarked ? (
-          <BookmarkCheck 
+          <BookmarkCheck
             size={24}
-            className='cursor-pointer text-primary' 
+            className='cursor-pointer text-primary'
             onClick={toggleBookmark}
             style={{ opacity: isLoading ? 0.5 : 1 }}
           />
         ) : (
-          <Bookmark 
+          <Bookmark
             size={24}
-            className='cursor-pointer text-muted-foreground' 
+            className='cursor-pointer text-muted-foreground'
             onClick={toggleBookmark}
             style={{ opacity: isLoading ? 0.5 : 1 }}
           />
@@ -49,19 +52,22 @@ const WordListItem = ({ word }: WordListItemProps) => {
         )}
       </div>
       {word.definitions && word.definitions.length > 0 && (
-        <p className='text-sm mt-2'>
-          {word.definitions[0].definition}
-        </p>
+        <p className='text-sm mt-2'>{word.definitions[0].definition}</p>
       )}
       <Separator className='bg-foreground/10 my-2' />
       <div className='flex justify-between items-center'>
         <div className='flex flex-shrink-0 gap-2 items-center text-muted-foreground text-xs'>
-          {word.news && word.news.length > 0 && word.news[0].categories && word.news[0].categories.length > 0 && (
-            <p>{capitalizeString(word.news[0].categories[0])}</p>
-          )}
-          {word.news && word.news.length > 0 && word.news[0].categories && word.news[0].categories.length > 0 && word.news[0].sourceUrl && (
-            <p>•</p>
-          )}
+          {word.news &&
+            word.news.length > 0 &&
+            word.news[0].categories &&
+            word.news[0].categories.length > 0 && (
+              <p>{capitalizeString(word.news[0].categories[0])}</p>
+            )}
+          {word.news &&
+            word.news.length > 0 &&
+            word.news[0].categories &&
+            word.news[0].categories.length > 0 &&
+            word.news[0].sourceUrl && <p>•</p>}
           {word.news && word.news.length > 0 && word.news[0].sourceUrl && (
             <a
               href={word.news[0].sourceUrl}
@@ -71,11 +77,11 @@ const WordListItem = ({ word }: WordListItemProps) => {
               Source
             </a>
           )}
-          {word.news && word.news.length > 0 && 
-           ((word.news[0].categories && word.news[0].categories.length > 0) || word.news[0].sourceUrl) && 
-           word.news[0].publishedAt && (
-            <p>•</p>
-          )}
+          {word.news &&
+            word.news.length > 0 &&
+            ((word.news[0].categories && word.news[0].categories.length > 0) ||
+              word.news[0].sourceUrl) &&
+            word.news[0].publishedAt && <p>•</p>}
           {word.news && word.news.length > 0 && word.news[0].publishedAt && (
             <p>{formatDateToDDMMYYYY(word.news[0].publishedAt)}</p>
           )}

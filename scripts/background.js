@@ -40,6 +40,20 @@ function initializeDB() {
   });
 }
 
+// Store environment variable in chrome.storage.local
+function storeEnvironmentVariable() {
+  // For background scripts, we need to get the ENV from extension environment variables
+  // This is typically passed from the manifest.json or build process
+  // For testing purposes, we'll default to 'develop' in debug mode, 'release' otherwise
+  const isDevelopmentMode = !('update_url' in chrome.runtime.getManifest());
+  const env = isDevelopmentMode ? 'develop' : 'release';
+  
+  // Store in chrome.storage.local
+  chrome.storage.local.set({ environment: env }, () => {
+    console.log(`Environment stored in storage: ${env}`);
+  });
+}
+
 // Add a word to the IndexedDB
 function addWordToDatabase(word) {
   return new Promise((resolve, reject) => {
@@ -291,6 +305,8 @@ function getWordBookmarkStatus(wordId) {
 // Initialize the extension
 chrome.runtime.onInstalled.addListener(async () => {
   await initializeDB();
+  // Store the environment variable
+  storeEnvironmentVariable();
   setupDefaultAlarm();
 });
 
@@ -310,12 +326,26 @@ function createNotificationAlarm(frequency) {
     // Don't create a new alarm if frequency is set to never (-)
     if (frequency === '-') return;
     
-    // Convert to minutes (frequency is in hours)
-    const minutes = parseInt(frequency) * 60;
-    
-    // Create a new repeating alarm
-    chrome.alarms.create(NOTIFICATION_ALARM_NAME, {
-      periodInMinutes: minutes
+    // Get environment value from storage
+    chrome.storage.local.get('environment', (result) => {
+      const env = result.environment || 'release';
+      
+      // Convert to minutes based on environment
+      let minutes;
+      if (env === 'develop') {
+        // In develop mode, frequency is already in minutes
+        minutes = parseInt(frequency);
+        console.log(`Development mode: setting alarm to ${minutes} minutes`);
+      } else {
+        // In release mode, convert hours to minutes
+        minutes = parseInt(frequency) * 60;
+        console.log(`Release mode: setting alarm to ${minutes} minutes (${frequency} hours)`);
+      }
+      
+      // Create a new repeating alarm
+      chrome.alarms.create(NOTIFICATION_ALARM_NAME, {
+        periodInMinutes: minutes
+      });
     });
   });
 }
@@ -342,6 +372,15 @@ function showNewWordNotification() {
 chrome.storage.onChanged.addListener((changes, area) => {
   if (area === 'local' && changes.notificationFrequency) {
     createNotificationAlarm(changes.notificationFrequency.newValue);
+  }
+  
+  // If the environment is changed, update alarms accordingly
+  if (area === 'local' && changes.environment) {
+    chrome.storage.local.get('notificationFrequency', (result) => {
+      if (result.notificationFrequency) {
+        createNotificationAlarm(result.notificationFrequency);
+      }
+    });
   }
 });
 
@@ -412,6 +451,20 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
         return { success: true, words: result.words, total: result.total };
       } catch (error) {
         console.error('Error handling getBookmarkedWords:', error);
+        return { success: false, error: error.message };
+      }
+    }
+    
+    if (request.action === 'getEnvironment') {
+      try {
+        const environment = await new Promise((resolve) => {
+          chrome.storage.local.get('environment', (result) => {
+            resolve(result.environment || 'release');
+          });
+        });
+        return { success: true, environment };
+      } catch (error) {
+        console.error('Error handling getEnvironment:', error);
         return { success: false, error: error.message };
       }
     }

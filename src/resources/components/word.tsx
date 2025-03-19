@@ -3,8 +3,8 @@ import { Badge } from '@/components/ui/badge.tsx'
 import { IWord } from '@/app/models/word'
 import { IWordExample } from '@/app/models/word-example.ts'
 import { removePeriodFromEnd } from '@/lib/string.ts'
-import { useWordBookmark } from './hooks/useWordBookmark'
-import { useAudioPlayer } from './hooks/useAudioPlayer'
+import { useWordBookmark } from './hooks/use-word-bookmark.ts'
+import { useAudioPlayer } from './hooks/use-audio-player.ts'
 
 interface IWordProps {
   word: IWord | null
