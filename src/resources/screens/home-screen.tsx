@@ -1,4 +1,4 @@
-import { BookmarkCheck, Settings } from 'lucide-react'
+import { Library, Settings } from 'lucide-react'
 import HeaderTitle from '@/resources/components/header-title.tsx'
 import { Separator } from '@/components/ui/separator.tsx'
 import MenuItem from '@/resources/components/menu-item.tsx'
@@ -6,7 +6,7 @@ import { goTo } from 'react-chrome-extension-router'
 import SettingsScreen from '@/resources/screens/settings-screen.tsx'
 import WordReference from '@/resources/components/word-reference.tsx'
 import Word from '@/resources/components/word.tsx'
-import WorkBookmarkedScreen from '@/resources/screens/word-bookmarked-screen.tsx'
+import WordListScreen from '@/resources/screens/word-list-screen.tsx'
 import { useEffect } from 'react'
 import useWordControllerStore from '@/app/controllers/word-controller'
 import Spinner from '@/components/ui/spinner'
@@ -27,9 +27,9 @@ const HomeScreen = () => {
       <div className='flex w-full flex-row justify-between p-4 border-b-[1px] border-base-content/20'>
         <div className='flex flex-row gap-4 items-center'>
           <MenuItem
-            title='Bookmarked'
-            icon={BookmarkCheck}
-            onClick={() => goTo(WorkBookmarkedScreen)}
+            title='Words'
+            icon={Library}
+            onClick={() => goTo(WordListScreen)}
           />
           <MenuItem
             title='Settings'

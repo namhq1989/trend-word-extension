@@ -7,7 +7,7 @@ import useBookmarkedWordsController from '@/app/controllers/bookmarked-words-con
 import { Button } from '@/components/ui/button.tsx'
 import { Loader2 } from 'lucide-react'
 
-const WordBookmarkedScreen = () => {
+const WordListScreen = () => {
   const {
     words,
     totalWords,
@@ -17,34 +17,50 @@ const WordBookmarkedScreen = () => {
     fetchBookmarkedWords,
     loadMore,
     setCategory,
-    reset
+    reset,
+    isBookmarkedOnly,
+    setBookmarkedOnly,
   } = useBookmarkedWordsController()
 
   useEffect(() => {
     // Load bookmarked words when the component mounts
-    fetchBookmarkedWords()
+    const fetchData = async () => {
+      await fetchBookmarkedWords()
+    }
+
+    fetchData().then()
 
     // Clean up when the component unmounts
     return () => {
       reset()
     }
-  }, [])
-
-  console.log('words', words)
+  }, [fetchBookmarkedWords])
 
   return (
     <div className='flex flex-col w-[400px] min-h-[600px] scrollbar-hide'>
       <div className='flex w-full flex-row justify-between p-4 border-b-[1px]'>
         <BackButton />
-        <HeaderTitle title='Bookmarked' />
+        <HeaderTitle title='Word List' />
       </div>
       <div className='flex flex-col p-4 gap-4'>
         <div className='flex justify-between items-center'>
-          <CategoryFilter 
-            value={selectedCategory} 
-            onChange={setCategory} 
-            disabled={isLoading} 
-          />
+          <div className='flex space-x-2'>
+            <CategoryFilter
+              value={selectedCategory}
+              onChange={setCategory}
+              disabled={isLoading}
+            />
+
+            <Button
+              variant={isBookmarkedOnly ? 'default' : 'outline'}
+              size='sm'
+              onClick={() => setBookmarkedOnly(!isBookmarkedOnly)}
+              disabled={isLoading}
+              className='h-9 cursor-pointer'
+            >
+              {isBookmarkedOnly ? 'Bookmarked' : 'All Words'}
+            </Button>
+          </div>
           <div className='text-sm text-muted-foreground'>
             {totalWords} {totalWords === 1 ? 'word' : 'words'}
           </div>
@@ -61,12 +77,12 @@ const WordBookmarkedScreen = () => {
                 <WordListItem key={word.id} word={word} />
               ))}
             </div>
-            
+
             {hasMore && (
               <div className='flex justify-center mt-4'>
-                <Button 
-                  variant='outline' 
-                  onClick={loadMore} 
+                <Button
+                  variant='outline'
+                  onClick={loadMore}
                   disabled={isLoading}
                 >
                   {isLoading ? (
@@ -83,9 +99,11 @@ const WordBookmarkedScreen = () => {
           </>
         ) : (
           <div className='flex flex-col justify-center items-center py-12 text-center'>
-            <p className='text-lg font-medium'>No bookmarked words found</p>
+            <p className='text-lg font-medium'>No words found</p>
             <p className='text-sm text-muted-foreground mt-2'>
-              Bookmark words to see them here
+              {isBookmarkedOnly
+                ? 'Bookmark words to see them here'
+                : 'Try changing your filters'}
             </p>
           </div>
         )}
@@ -94,4 +112,4 @@ const WordBookmarkedScreen = () => {
   )
 }
 
-export default WordBookmarkedScreen
+export default WordListScreen
