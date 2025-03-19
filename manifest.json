@@ -1,6 +1,6 @@
 {
     "manifest_version": 3,
-    "name": "[DEV] WordDrop - Learn Through Headlines",
+    "name": "WordDrop - Learn Through Headlines",
     "description": "Expand your vocabulary daily with words from trending news stories!",
     "version": "1.0.0",
     "action": {

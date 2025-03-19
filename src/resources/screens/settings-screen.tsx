@@ -87,9 +87,16 @@ const SettingsScreen = () => {
     })
   }
 
+  const openWordDropUrl = () => {
+    window.open(
+      'https://chromewebstore.google.com/detail/gbhnhocbiigagomaelljdblppfgbgbkj',
+      '_blank',
+    )
+  }
+
   const openBapBiUrl = () => {
     window.open(
-      'https://chromewebstore.google.com/detail/bapbi-productivity-relaxa/ahpbddfeddnminklkodiapofdddmcmlb',
+      'https://chromewebstore.google.com/detail/ahpbddfeddnminklkodiapofdddmcmlb',
       '_blank',
     )
   }
@@ -324,7 +331,7 @@ const SettingsScreen = () => {
               {/*</div>*/}
               <div className='flex gap-2 items-center cursor-pointer'>
                 <Heart size={16} className='text-primary' />
-                <span className='text-sm text-primary'>Rate extension</span>
+                <span className='text-sm text-primary' onClick={openWordDropUrl}>Rate extension</span>
               </div>
             </div>
           </div>
