@@ -1,6 +1,9 @@
 // Constants
 const NOTIFICATION_ALARM_NAME = 'wordDropNotification'
+const WORD_FETCH_ALARM_NAME = 'wordDropFetch'
 const DEFAULT_NOTIFICATION_FREQUENCY = '1' // every 1 hour
+const WORD_FETCH_INTERVAL_MINUTES_DEV = 1 // fetch new words every minute in development
+const WORD_FETCH_INTERVAL_MINUTES_RELEASE = 60 // fetch new words every hour in release
 const DB_NAME = 'WordDropDB'
 const DB_VERSION = 1
 const WORDS_STORE_NAME = 'words'
@@ -40,17 +43,25 @@ function initializeDB() {
   })
 }
 
-// Store environment variable in chrome.storage.local
-function storeEnvironmentVariable() {
-  // For background scripts, we need to get the ENV from extension environment variables
-  // This is typically passed from the manifest.json or build process
-  // For testing purposes, we'll default to 'develop' in debug mode, 'release' otherwise
-  const isDevelopmentMode = !('update_url' in chrome.runtime.getManifest())
-  const env = isDevelopmentMode ? 'develop' : 'release'
+// Helper function to get environment from storage with fallback
+function getEnvironment() {
+  return new Promise((resolve) => {
+    chrome.storage.local.get('env', (result) => {
+      const env = result.env || 'release' // Default to release if not set
+      console.log(`Using environment: ${env}`)
+      resolve(env)
+    })
+  })
+}
 
-  // Store in chrome.storage.local
-  chrome.storage.local.set({ environment: env }, () => {
-    console.log(`Environment stored in storage: ${env}`)
+// Helper function to get API host from storage with fallback
+function getApiHost() {
+  return new Promise((resolve) => {
+    chrome.storage.local.get('apiHost', (result) => {
+      const apiHost = result.apiHost || 'wd.bapbi.app' // Default to production API if not set
+      console.log(`Using API host: ${apiHost}`)
+      resolve(apiHost)
+    })
   })
 }
 
@@ -388,6 +399,45 @@ function getWordBookmarkStatus(wordId) {
   })
 }
 
+// Get the latest word from IndexedDB
+function getLatestWord() {
+  return new Promise((resolve, reject) => {
+    if (!db) {
+      reject(new Error('Database not initialized'))
+      return
+    }
+
+    const transaction = db.transaction([WORDS_STORE_NAME], 'readonly')
+    const store = transaction.objectStore(WORDS_STORE_NAME)
+    const request = store.getAll()
+
+    request.onerror = (event) => {
+      console.error('Error getting words from IndexedDB:', event.target.error)
+      reject(event.target.error)
+    }
+
+    request.onsuccess = () => {
+      const words = request.result
+      
+      if (!words || words.length === 0) {
+        // No words in database yet
+        resolve(null)
+        return
+      }
+
+      // Sort by date (newest first)
+      words.sort((a, b) => {
+        const dateA = new Date(a.date || 0)
+        const dateB = new Date(b.date || 0)
+        return dateB - dateA
+      })
+
+      // Return the most recent word
+      resolve(words[0])
+    }
+  })
+}
+
 // Helper function to get a random item from an array
 const getRandomItem = (items) => {
   return items[Math.floor(Math.random() * items.length)]
@@ -549,11 +599,8 @@ async function fetchNewWord() {
 
     console.log('Using difficulty levels:', levelsToUse)
 
-    const apiBaseUrl = await new Promise((resolve) => {
-      chrome.storage.local.get('apiHost', (result) => {
-        resolve(result.apiHost || 'http://localhost:3000')
-      })
-    })
+    // Get API host with fallback to production URL
+    const apiBaseUrl = await getApiHost()
 
     // Build query parameters
     const queryParams = new URLSearchParams()
@@ -577,13 +624,26 @@ async function fetchNewWord() {
     })
 
     if (!response.ok) {
+      // Reset fetchedCategories when API call fails
+      cache.fetchedCategories = []
+      await new Promise((resolve) => {
+        chrome.storage.local.set({ wordsCache: cache }, resolve)
+      })
+      console.log('API call failed, reset fetchedCategories to empty array')
       throw new Error(`API error: ${response.status}`)
     }
 
     const data = await response.json()
-    const word = data.word
+    const word = data.data.word
 
     if (!word) {
+      // Reset fetchedCategories when no word is returned
+      cache.fetchedCategories = []
+      await new Promise((resolve) => {
+        chrome.storage.local.set({ wordsCache: cache }, resolve)
+      })
+      console.log('No word returned from API, reset fetchedCategories to empty array')
+      
       if (lastFetchedWord) {
         console.log('Using last fetched word due to API failure')
         return lastFetchedWord
@@ -664,6 +724,15 @@ async function fetchNewWord() {
         resolve(result.wordsCache || null)
       })
     })
+    
+    // Reset fetchedCategories when an error occurs
+    if (cache) {
+      cache.fetchedCategories = []
+      await new Promise((resolve) => {
+        chrome.storage.local.set({ wordsCache: cache }, resolve)
+      })
+      console.log('Error occurred, reset fetchedCategories to empty array')
+    }
 
     if (cache && cache.lastFetchedWord) {
       return cache.lastFetchedWord
@@ -676,9 +745,10 @@ async function fetchNewWord() {
 // Initialize the extension
 chrome.runtime.onInstalled.addListener(async () => {
   await initializeDB()
-  // Store the environment variable
-  storeEnvironmentVariable()
+  // Set up default alarm for notifications
   setupDefaultAlarm()
+  // Set up word fetching interval
+  setupWordFetchingInterval()
 })
 
 // Setup default alarm for notifications
@@ -690,8 +760,44 @@ function setupDefaultAlarm() {
   })
 }
 
+// Setup interval to fetch new words periodically
+async function setupWordFetchingInterval() {
+  console.log('Setting up word fetching interval')
+  
+  // Fetch a word immediately on startup
+  fetchNewWord().then(word => {
+    if (word) {
+      console.log('Successfully fetched initial word:', word.word)
+    } else {
+      console.warn('Failed to fetch initial word')
+    }
+  }).catch(error => {
+    console.error('Error fetching initial word:', error)
+  })
+  
+  // Get environment from storage to determine interval
+  const env = await getEnvironment()
+  const intervalMinutes = env === 'develop' ? 
+    WORD_FETCH_INTERVAL_MINUTES_DEV : 
+    WORD_FETCH_INTERVAL_MINUTES_RELEASE
+  
+  console.log(`Environment: ${env}, using interval of ${intervalMinutes} minute(s)`)
+  
+  // Set up an alarm to fetch new words based on environment
+  chrome.alarms.get(WORD_FETCH_ALARM_NAME, (alarm) => {
+    // Clear any existing alarm first to ensure we use the correct interval
+    chrome.alarms.clear(WORD_FETCH_ALARM_NAME, () => {
+      // Create a new alarm with the appropriate interval
+      chrome.alarms.create(WORD_FETCH_ALARM_NAME, {
+        periodInMinutes: intervalMinutes
+      })
+      console.log(`Created word fetch alarm to run every ${intervalMinutes} minute(s)`)
+    })
+  })
+}
+
 // Create an alarm based on notification frequency
-function createNotificationAlarm(frequency) {
+async function createNotificationAlarm(frequency) {
   // If frequency is set to never (-), just clear any existing alarm and return
   if (frequency === '-') {
     console.log('Notification frequency set to never (-), clearing alarm')
@@ -699,30 +805,28 @@ function createNotificationAlarm(frequency) {
     return
   }
 
+  // Get environment value from storage
+  const env = await getEnvironment()
+
+  // Convert to minutes based on environment
+  let minutes
+  if (env === 'develop') {
+    // In develop mode, frequency is already in minutes
+    minutes = parseInt(frequency)
+    console.log(`Development mode: setting alarm to ${minutes} minutes`)
+  } else {
+    // In release mode, convert hours to minutes
+    minutes = parseInt(frequency) * 60
+    console.log(
+      `Release mode: setting alarm to ${minutes} minutes (${frequency} hours)`,
+    )
+  }
+
   // Clear any existing alarm first
   chrome.alarms.clear(NOTIFICATION_ALARM_NAME, () => {
-    // Get environment value from storage
-    chrome.storage.local.get('environment', (result) => {
-      const env = result.environment || 'release'
-
-      // Convert to minutes based on environment
-      let minutes
-      if (env === 'develop') {
-        // In develop mode, frequency is already in minutes
-        minutes = parseInt(frequency)
-        console.log(`Development mode: setting alarm to ${minutes} minutes`)
-      } else {
-        // In release mode, convert hours to minutes
-        minutes = parseInt(frequency) * 60
-        console.log(
-          `Release mode: setting alarm to ${minutes} minutes (${frequency} hours)`,
-        )
-      }
-
-      // Create a new repeating alarm
-      chrome.alarms.create(NOTIFICATION_ALARM_NAME, {
-        periodInMinutes: minutes,
-      })
+    // Create a new repeating alarm
+    chrome.alarms.create(NOTIFICATION_ALARM_NAME, {
+      periodInMinutes: minutes,
     })
   })
 }
@@ -732,6 +836,18 @@ chrome.alarms.onAlarm.addListener(async (alarm) => {
   if (alarm.name === NOTIFICATION_ALARM_NAME) {
     const word = await fetchNewWord()
     await showNewWordNotification(word)
+  } else if (alarm.name === WORD_FETCH_ALARM_NAME) {
+    console.log('Word fetch alarm triggered, fetching new word')
+    try {
+      const word = await fetchNewWord()
+      if (word) {
+        console.log(`Successfully fetched new word: ${word.word}`)
+      } else {
+        console.warn('Failed to fetch new word from scheduled alarm')
+      }
+    } catch (error) {
+      console.error('Error fetching word from scheduled alarm:', error)
+    }
   }
 })
 
@@ -885,6 +1001,16 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
         return { success: false, error: error.message }
       }
     }
+    
+    if (request.action === 'getLatestWord') {
+      try {
+        const word = await getLatestWord()
+        return { success: true, word }
+      } catch (error) {
+        console.error('Error handling getLatestWord:', error)
+        return { success: false, error: error.message }
+      }
+    }
 
     return null // Not handling this message
   }
@@ -900,7 +1026,10 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
   return true
 })
 
-// When the extension starts up, initialize the DB
-initializeDB().catch((error) => {
+// When the extension starts up, initialize the DB and set up word fetching
+initializeDB().then(() => {
+  // Set up the word fetching interval when the extension starts
+  setupWordFetchingInterval()
+}).catch((error) => {
   console.error('Failed to initialize database on startup:', error)
 })
