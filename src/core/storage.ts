@@ -47,6 +47,7 @@ interface IStorage {
   getLastApiCallInfo: () => Promise<{ time: number; word: IWord | null }>
   updateFetchedCategories: (categories: string[]) => Promise<string[]>
   getFetchedCategories: () => Promise<string[]>
+  resetFetchedCategories: () => Promise<void>
   displayErrorNotification: (message: string) => Promise<void>
   
   toggleWordBookmark: (wordId: string, newStatus?: boolean, wordData?: IWord) => Promise<boolean>
@@ -421,6 +422,37 @@ const useStorageStore = create<IStorage>((_, get) => ({
         .catch((error) => {
           console.error('Error in getFetchedCategories:', error)
           resolve([])
+        })
+    })
+  },
+
+  // Function to reset fetched categories
+  resetFetchedCategories: () => {
+    return new Promise<void>((resolve, reject) => {
+      get()
+        .getCachedWords()
+        .then((cache) => {
+          if (!cache) {
+            resolve()
+            return
+          }
+          
+          // Reset the fetchedCategories array
+          cache.fetchedCategories = []
+          
+          chrome.storage.local.set({ wordsCache: cache }, () => {
+            if (chrome.runtime.lastError) {
+              console.error('Error resetting fetched categories:', chrome.runtime.lastError)
+              reject()
+            } else {
+              console.log('Fetched categories reset successfully')
+              resolve()
+            }
+          })
+        })
+        .catch((error) => {
+          console.error('Error in resetFetchedCategories:', error)
+          reject()
         })
     })
   },

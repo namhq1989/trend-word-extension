@@ -7,13 +7,11 @@ import { useEffect } from 'react'
 import {
   Bell,
   Code,
-  Gem,
   Hash,
   Heart,
   Info,
   MessageSquareCode,
   MoonStar,
-  Shell,
 } from 'lucide-react'
 import { Switch } from '@/components/ui/switch.tsx'
 import { useTheme } from '@/components/theme/theme.tsx'
@@ -33,7 +31,6 @@ import {
   TooltipTrigger,
 } from '@/components/ui/tooltip'
 import { Input } from '@/components/ui/input.tsx'
-import { copyToClipboard } from '@/lib/string.ts'
 import useNotificationStore from '@/core/notification.ts'
 import { DifficultyLevel, NotificationFrequency } from '@/core/storage.ts'
 
@@ -109,35 +106,35 @@ const SettingsScreen = () => {
       </div>
       <div className='flex flex-col p-4 gap-8'>
         {/*Account*/}
-        <div className='flex flex-col gap-2'>
-          <SectionTitle title='Account' />
-          <div className='flex flex-col gap-2'>
-            <div className='flex bg-container p-4 justify-between items-center'>
-              <div className='flex flex-row gap-2 items-center justify-center'>
-                <Gem size={20} className='text-muted-foreground' />
-                <p className='text-sm text-foreground'>Subscription</p>
-              </div>
-              <p className='text-sm text-foreground'>Free</p>
-            </div>
-            <div className='flex bg-container p-4 justify-between items-center'>
-              <div className='flex flex-row gap-2 items-center justify-center'>
-                <Shell size={20} className='text-muted-foreground' />
-                <p className='text-sm text-foreground'>Account ID</p>
-              </div>
-              <p
-                className='text-sm text-foreground cursor-pointer'
-                onClick={() => {
-                  copyToClipboard('2RbWzbtRX8zUEa84')
-                  showSuccessNotification({
-                    description: 'Account ID copied to clipboard',
-                  })
-                }}
-              >
-                2RbWzbtRX8zUEa84
-              </p>
-            </div>
-          </div>
-        </div>
+        {/*<div className='flex flex-col gap-2'>*/}
+        {/*  <SectionTitle title='Account' />*/}
+        {/*  <div className='flex flex-col gap-2'>*/}
+        {/*    <div className='flex bg-container p-4 justify-between items-center'>*/}
+        {/*      <div className='flex flex-row gap-2 items-center justify-center'>*/}
+        {/*        <Gem size={20} className='text-muted-foreground' />*/}
+        {/*        <p className='text-sm text-foreground'>Subscription</p>*/}
+        {/*      </div>*/}
+        {/*      <p className='text-sm text-foreground'>Free</p>*/}
+        {/*    </div>*/}
+        {/*    <div className='flex bg-container p-4 justify-between items-center'>*/}
+        {/*      <div className='flex flex-row gap-2 items-center justify-center'>*/}
+        {/*        <Shell size={20} className='text-muted-foreground' />*/}
+        {/*        <p className='text-sm text-foreground'>Account ID</p>*/}
+        {/*      </div>*/}
+        {/*      <p*/}
+        {/*        className='text-sm text-foreground cursor-pointer'*/}
+        {/*        onClick={() => {*/}
+        {/*          copyToClipboard('2RbWzbtRX8zUEa84')*/}
+        {/*          showSuccessNotification({*/}
+        {/*            description: 'Account ID copied to clipboard',*/}
+        {/*          })*/}
+        {/*        }}*/}
+        {/*      >*/}
+        {/*        2RbWzbtRX8zUEa84*/}
+        {/*      </p>*/}
+        {/*    </div>*/}
+        {/*  </div>*/}
+        {/*</div>*/}
         {/*Customization*/}
         <div className='flex flex-col gap-2'>
           <SectionTitle title='Customization' />
