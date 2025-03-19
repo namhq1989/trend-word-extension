@@ -5,6 +5,7 @@ import { Toaster } from '@/components/ui/sonner.tsx'
 
 chrome.storage.local.set(
   {
+    env: import.meta.env.VITE_ENV,
     apiHost: import.meta.env.VITE_API_HOST,
   },
   () => {

@@ -15,17 +15,17 @@ const useWordControllerStore = create<IWordController>((set) => ({
     set({ isFetchingNewWord: true })
 
     try {
-      // Use runtime message to fetch new word from background script
+      // Use runtime message to get the latest word from IndexedDB
       const response = await chrome.runtime.sendMessage({
-        action: 'fetchNewWord',
+        action: 'getLatestWord',
       })
 
       if (!response || !response.success) {
         console.error(
-          'Error fetching new word:',
+          'Error retrieving latest word:',
           response?.error || 'Unknown error',
         )
-        throw new Error(response?.error || 'Failed to fetch new word')
+        throw new Error(response?.error || 'Failed to retrieve latest word')
       }
 
       const word = response.word
@@ -34,7 +34,7 @@ const useWordControllerStore = create<IWordController>((set) => ({
         // Display error notification if no word available
         const storage = useStorageStore.getState()
         await storage.displayErrorNotification(
-          'Failed to fetch a word. Please try again later.',
+          'No words available. Please try again later.',
         )
         set({ newWord: null })
         return
