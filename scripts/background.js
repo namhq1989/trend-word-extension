@@ -1,9 +1,9 @@
 // Constants
 const NOTIFICATION_ALARM_NAME = 'wordDropNotification'
 const WORD_FETCH_ALARM_NAME = 'wordDropFetch'
-const DEFAULT_NOTIFICATION_FREQUENCY = '1' // every 1 hour
+const DEFAULT_NOTIFICATION_FREQUENCY = '30' // every 30 minutes
 const WORD_FETCH_INTERVAL_MINUTES_DEV = 1 // fetch new words every minute in development
-const WORD_FETCH_INTERVAL_MINUTES_RELEASE = 60 // fetch new words every hour in release
+const WORD_FETCH_INTERVAL_MINUTES_RELEASE = 30 // fetch new words every 30 minutes in release
 const DB_NAME = 'WordDropDB'
 const DB_VERSION = 1
 const WORDS_STORE_NAME = 'words'
@@ -438,6 +438,35 @@ function getLatestWord() {
   })
 }
 
+// Get the remaining time until the next notification
+function getNextNotificationTime() {
+  return new Promise((resolve, reject) => {
+    chrome.alarms.get(NOTIFICATION_ALARM_NAME, (alarm) => {
+      if (chrome.runtime.lastError) {
+        console.error('Error getting alarm:', chrome.runtime.lastError)
+        reject(chrome.runtime.lastError)
+        return
+      }
+      
+      if (!alarm) {
+        // No alarm set
+        resolve(null)
+        return
+      }
+      
+      const now = Date.now()
+      const nextAlarmTime = alarm.scheduledTime
+      const remainingMs = Math.max(0, nextAlarmTime - now)
+      
+      resolve({
+        scheduledTime: nextAlarmTime,
+        remainingMs: remainingMs,
+        periodInMinutes: alarm.periodInMinutes
+      })
+    })
+  })
+}
+
 // Helper function to get a random item from an array
 const getRandomItem = (items) => {
   return items[Math.floor(Math.random() * items.length)]
@@ -455,15 +484,15 @@ const convertFrequencyToMs = (frequency) => {
       const env = result.environment || 'release'
 
       if (env === 'develop') {
-        // In development mode, use minutes instead of hours for faster testing
+        // In development mode, use a shorter interval for faster testing
         console.log(
-          `Development mode: using ${freqNumber} minutes instead of hours`,
+          `Development mode: using ${freqNumber / 10} minutes instead of ${freqNumber} minutes`,
         )
-        resolve(freqNumber * 60 * 1000) // convert minutes to milliseconds
+        resolve((freqNumber / 10) * 60 * 1000) // convert to milliseconds with reduced time for testing
       } else {
-        // In release mode, use hours as normal
-        console.log(`Release mode: using ${freqNumber} hours`)
-        resolve(freqNumber * 60 * 60 * 1000) // convert hours to milliseconds
+        // In release mode, use minutes as normal
+        console.log(`Release mode: using ${freqNumber} minutes`)
+        resolve(freqNumber * 60 * 1000) // convert minutes to milliseconds
       }
     })
   })
@@ -567,7 +596,7 @@ async function fetchNewWord() {
     let selectedCategories =
       categories.length > 0
         ? categories
-        : ['politics', 'technology', 'business']
+        : ['politics', 'technology', 'business', 'science', 'health', 'sports', 'entertainment', 'world', 'education']
 
     // Get already fetched categories
     const fetchedCategories = cache.fetchedCategories || []
@@ -1008,6 +1037,26 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
         return { success: true, word }
       } catch (error) {
         console.error('Error handling getLatestWord:', error)
+        return { success: false, error: error.message }
+      }
+    }
+    
+    if (request.action === 'getNextNotificationTime') {
+      try {
+        const alarmInfo = await getNextNotificationTime()
+        return { success: true, alarmInfo }
+      } catch (error) {
+        console.error('Error handling getNextNotificationTime:', error)
+        return { success: false, error: error.message }
+      }
+    }
+    
+    if (request.action === 'getNextNotificationTime') {
+      try {
+        const alarmInfo = await getNextNotificationTime()
+        return { success: true, alarmInfo }
+      } catch (error) {
+        console.error('Error handling getNextNotificationTime:', error)
         return { success: false, error: error.message }
       }
     }

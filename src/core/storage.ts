@@ -7,7 +7,7 @@ enum AuthProvider {
 }
 
 export type DifficultyLevel = 'beginner' | 'intermediate' | 'advanced'
-export type NotificationFrequency = '1' | '2' | '3' | '-'
+export type NotificationFrequency = '30' | '60' | '90' | '120' | '180' | '-'
 
 interface WordsCache {
   date: string
@@ -145,8 +145,10 @@ const useStorageStore = create<IStorage>((_, get) => ({
     return new Promise<string[]>((resolve, reject) => {
       chrome.storage.local.get('selectedCategories', (result) => {
         if (chrome.runtime.lastError) {
+          // Return empty array if there's an error
           reject([])
         } else {
+          // If no categories are selected yet, return empty array
           resolve(result.selectedCategories || [])
         }
       })
@@ -193,9 +195,10 @@ const useStorageStore = create<IStorage>((_, get) => ({
     return new Promise<DifficultyLevel[]>((resolve, reject) => {
       chrome.storage.local.get('selectedDifficultyLevels', (result) => {
         if (chrome.runtime.lastError) {
+          // Return empty array if there's an error
           reject([])
         } else {
-          // If no levels are stored yet, return an empty array
+          // If no levels are stored yet, return empty array
           resolve(result.selectedDifficultyLevels || [])
         }
       })
@@ -218,10 +221,10 @@ const useStorageStore = create<IStorage>((_, get) => ({
     return new Promise<NotificationFrequency>((resolve, reject) => {
       chrome.storage.local.get('notificationFrequency', (result) => {
         if (chrome.runtime.lastError) {
-          reject('1' as NotificationFrequency)
+          reject('30' as NotificationFrequency)
         } else {
           resolve(
-            (result.notificationFrequency || '1') as NotificationFrequency,
+            (result.notificationFrequency || '30') as NotificationFrequency,
           )
         }
       })

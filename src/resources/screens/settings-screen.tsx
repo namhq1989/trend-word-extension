@@ -69,7 +69,13 @@ const SettingsScreen = () => {
 
     let message = 'Notifications disabled'
     if (value !== '-') {
-      message = `Notifications will be sent every ${value} hour${value !== '1' ? 's' : ''}`
+      const minutes = parseInt(value)
+      if (minutes >= 60 && minutes % 60 === 0) {
+        const hours = minutes / 60
+        message = `Notifications will be sent every ${hours} hour${hours !== 1 ? 's' : ''}`
+      } else {
+        message = `Notifications will be sent every ${value} minutes`
+      }
     }
 
     showSuccessNotification({
@@ -103,6 +109,9 @@ const SettingsScreen = () => {
 
   // Check if any difficulty levels are selected
   const hasSelectedLevels = difficultyLevels.some((level) => level.isSelected)
+
+  // Check if any categories are selected
+  const hasSelectedCategories = categories.some((category) => category.isSelected)
 
   return (
     <div className='flex flex-col w-[400px] min-h-[600px] scrollbar-hide'>
@@ -208,9 +217,11 @@ const SettingsScreen = () => {
                 <SelectContent>
                   <SelectGroup>
                     <SelectLabel>Receive notifications</SelectLabel>
-                    <SelectItem value='1'>Every 1h</SelectItem>
-                    <SelectItem value='2'>Every 2h</SelectItem>
-                    <SelectItem value='3'>Every 3h</SelectItem>
+                    <SelectItem value='30'>Every 30 minutes</SelectItem>
+                    <SelectItem value='60'>Every 1 hour</SelectItem>
+                    <SelectItem value='90'>Every 90 minutes</SelectItem>
+                    <SelectItem value='120'>Every 2 hours</SelectItem>
+                    <SelectItem value='180'>Every 3 hours</SelectItem>
                     <SelectItem value='-'>Never</SelectItem>
                   </SelectGroup>
                 </SelectContent>
@@ -263,7 +274,27 @@ const SettingsScreen = () => {
 
         {/*Categories*/}
         <div className='flex flex-col gap-2'>
-          <SectionTitle title='Categories' />
+          <div className='flex flex-row justify-between items-center'>
+            <SectionTitle title='Categories' />
+            <TooltipProvider>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Info
+                    size={16}
+                    className='text-muted-foreground cursor-pointer'
+                  />
+                </TooltipTrigger>
+                <TooltipContent className='w-[200px] p-4 mr-4'>
+                  <p className='text-sm'>
+                    Select which categories you want to receive words
+                    from
+                    {!hasSelectedCategories &&
+                      '. Currently, no categories are selected, which means words from all categories will be shown'}
+                  </p>
+                </TooltipContent>
+              </Tooltip>
+            </TooltipProvider>
+          </div>
           <div className='grid grid-cols-3 gap-2'>
             {categories.length === 0 && (
               <div className='col-span-3 flex items-center justify-center'>
