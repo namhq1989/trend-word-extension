@@ -217,6 +217,7 @@ const SettingsScreen = () => {
                 <SelectContent>
                   <SelectGroup>
                     <SelectLabel>Receive notifications</SelectLabel>
+                    <SelectItem value='1'>Every 1 minute</SelectItem>
                     <SelectItem value='30'>Every 30 minutes</SelectItem>
                     <SelectItem value='60'>Every 1 hour</SelectItem>
                     <SelectItem value='90'>Every 90 minutes</SelectItem>

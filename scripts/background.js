@@ -3,7 +3,7 @@ const NOTIFICATION_ALARM_NAME = 'wordDropNotification'
 const WORD_FETCH_ALARM_NAME = 'wordDropFetch'
 const DEFAULT_NOTIFICATION_FREQUENCY = '30' // every 30 minutes
 const WORD_FETCH_INTERVAL_MINUTES_DEV = 1 // fetch new words every minute in development
-const WORD_FETCH_INTERVAL_MINUTES_RELEASE = 30 // fetch new words every 30 minutes in release
+const WORD_FETCH_INTERVAL_MINUTES_RELEASE = 20 // fetch new words every 20 minutes in release
 const DB_NAME = 'WordDropDB'
 const DB_VERSION = 1
 const WORDS_STORE_NAME = 'words'
@@ -400,41 +400,97 @@ function getWordBookmarkStatus(wordId) {
 }
 
 // Get the latest word from IndexedDB
-function getLatestWord() {
+// If forceNew is true, try to get a different word than the current one
+// If forceNew is false, just return the current word from storage if available
+function getLatestWord(forceNew = false) {
   return new Promise((resolve, reject) => {
     if (!db) {
       reject(new Error('Database not initialized'))
       return
     }
 
-    const transaction = db.transaction([WORDS_STORE_NAME], 'readonly')
-    const store = transaction.objectStore(WORDS_STORE_NAME)
-    const request = store.getAll()
-
-    request.onerror = (event) => {
-      console.error('Error getting words from IndexedDB:', event.target.error)
-      reject(event.target.error)
-    }
-
-    request.onsuccess = () => {
-      const words = request.result
+    // Get the current word from storage
+    chrome.storage.local.get('currentWord', async (result) => {
+      const currentWord = result.currentWord || null
       
-      if (!words || words.length === 0) {
-        // No words in database yet
-        resolve(null)
-        return
+      // If we're not forcing a new word and we have a current word, just return it
+      if (!forceNew && currentWord) {
+        console.log('Returning current word from storage:', currentWord.word);
+        resolve(currentWord);
+        return;
+      }
+      
+      const transaction = db.transaction([WORDS_STORE_NAME], 'readonly')
+      const store = transaction.objectStore(WORDS_STORE_NAME)
+      const request = store.getAll()
+
+      request.onerror = (event) => {
+        console.error('Error getting words from IndexedDB:', event.target.error)
+        reject(event.target.error)
       }
 
-      // Sort by date (newest first)
-      words.sort((a, b) => {
-        const dateA = new Date(a.date || 0)
-        const dateB = new Date(b.date || 0)
-        return dateB - dateA
-      })
+      request.onsuccess = () => {
+        const words = request.result
+        
+        if (!words || words.length === 0) {
+          // No words in database yet
+          resolve(null)
+          return
+        }
 
-      // Return the most recent word
-      resolve(words[0])
-    }
+        // Sort by date (newest first)
+        words.sort((a, b) => {
+          const dateA = new Date(a.date || 0)
+          const dateB = new Date(b.date || 0)
+          return dateB - dateA
+        })
+
+        // Try to get a different word if the current one matches
+        let attempts = 0;
+        let maxAttempts = 5;
+        let selectedWord = words[0];
+        
+        // If we have a current word and it matches the latest word, try to find a different one
+        if (forceNew && currentWord && currentWord.id === selectedWord.id && words.length > 1) {
+          console.log('Current word matches latest word, trying to find a different one');
+          
+          while (attempts < maxAttempts && currentWord.id === selectedWord.id) {
+            // Get a random index between 0 and words.length-1 (excluding the first word if it's the current one)
+            const randomIndex = Math.floor(Math.random() * (words.length - 1)) + 1;
+            selectedWord = words[randomIndex];
+            attempts++;
+            console.log(`Attempt ${attempts}: Selected word ${selectedWord.word}`);
+          }
+          
+          if (attempts >= maxAttempts && currentWord.id === selectedWord.id) {
+            console.log(`Reached max attempts (${maxAttempts}), using latest word anyway`);
+            selectedWord = words[0];
+          }
+        }
+        
+        // Store the selected word as the current word
+        chrome.storage.local.set({ currentWord: selectedWord });
+        
+        // Notify any open popups about the new word
+        console.log('[BACKGROUND] Sending wordUpdated message with word:', selectedWord.word);
+        chrome.runtime.sendMessage({
+          action: 'wordUpdated',
+          word: selectedWord
+        }).then(() => {
+          console.log('[BACKGROUND] Successfully sent wordUpdated message');
+        }).catch(error => {
+          // This error is expected if no popup is open to receive the message
+          if (!error.message.includes('Could not establish connection')) {
+            console.error('[BACKGROUND] Error sending word update message:', error);
+          } else {
+            console.log('[BACKGROUND] No popup open to receive message (expected)');
+          }
+        });
+        
+        // Return the selected word
+        resolve(selectedWord);
+      }
+    });
   })
 }
 
@@ -863,14 +919,114 @@ async function createNotificationAlarm(frequency) {
 // Listen for alarm trigger
 chrome.alarms.onAlarm.addListener(async (alarm) => {
   if (alarm.name === NOTIFICATION_ALARM_NAME) {
-    const word = await fetchNewWord()
-    await showNewWordNotification(word)
+    // Get current word first to compare
+    const currentWord = await new Promise(resolve => {
+      chrome.storage.local.get('currentWord', (result) => {
+        resolve(result.currentWord || null);
+      });
+    });
+    
+    // Use fetchNewWord directly to ensure we get a fresh word from the API
+    console.log('Notification alarm triggered, fetching a new word from API');
+    let newWord = await fetchNewWord();
+    
+    // If we somehow got the same word back, try with getLatestWord as a fallback
+    if (currentWord && newWord && currentWord.id === newWord.id) {
+      console.log(`Notification alarm: Got same word from API (${newWord.word}), trying with IndexedDB`);
+      
+      // Try to get a different word from IndexedDB
+      let attempts = 0;
+      const maxAttempts = 5;
+      
+      while (currentWord && newWord && currentWord.id === newWord.id && attempts < maxAttempts) {
+        // Get all words from IndexedDB
+        const allWords = await new Promise((resolve, reject) => {
+          const transaction = db.transaction([WORDS_STORE_NAME], 'readonly');
+          const store = transaction.objectStore(WORDS_STORE_NAME);
+          const request = store.getAll();
+          
+          request.onerror = (event) => {
+            reject(event.target.error);
+          };
+          
+          request.onsuccess = () => {
+            resolve(request.result || []);
+          };
+        });
+        
+        if (allWords.length <= 1) {
+          break; // Not enough words to find a different one
+        }
+        
+        // Filter out the current word
+        const otherWords = allWords.filter(word => word.id !== currentWord.id);
+        
+        if (otherWords.length > 0) {
+          // Get a random word from the filtered list
+          const randomIndex = Math.floor(Math.random() * otherWords.length);
+          newWord = otherWords[randomIndex];
+          console.log(`Attempt ${attempts + 1}: Selected different word ${newWord.word}`);
+          break; // We found a different word, exit the loop
+        }
+        
+        attempts++;
+      }
+      
+      if (currentWord && newWord && currentWord.id === newWord.id) {
+        console.log(`Notification alarm: Failed to get different word after ${maxAttempts} attempts`);
+      } else if (newWord) {
+        console.log(`Notification alarm: Got new word: ${newWord.word}`);
+      }
+    } else {
+      console.log(`Notification alarm: Successfully got new word: ${newWord ? newWord.word : 'null'}`);
+    }
+    
+    // Store the new word as the current word
+    if (newWord) {
+      chrome.storage.local.set({ currentWord: newWord });
+      
+      // Notify any open popups about the new word
+      console.log('[BACKGROUND] Notification alarm: Sending wordUpdated message with word:', newWord.word);
+      chrome.runtime.sendMessage({
+        action: 'wordUpdated',
+        word: newWord
+      }).then(() => {
+        console.log('[BACKGROUND] Successfully sent wordUpdated message from notification alarm');
+      }).catch(error => {
+        // This error is expected if no popup is open to receive the message
+        if (!error.message.includes('Could not establish connection')) {
+          console.error('[BACKGROUND] Error sending word update message from notification alarm:', error);
+        } else {
+          console.log('[BACKGROUND] No popup open to receive message from notification alarm (expected)');
+        }
+      });
+    }
+    
+    await showNewWordNotification(newWord);
   } else if (alarm.name === WORD_FETCH_ALARM_NAME) {
     console.log('Word fetch alarm triggered, fetching new word')
     try {
       const word = await fetchNewWord()
       if (word) {
+        // Store the fetched word as the current word
+        chrome.storage.local.set({ currentWord: word });
         console.log(`Successfully fetched new word: ${word.word}`)
+        
+        // Notify any open popups about the new word
+        console.log('[BACKGROUND] Word fetch alarm: Sending wordUpdated message with word:', word.word);
+        chrome.runtime.sendMessage({
+          action: 'wordUpdated',
+          word: word
+        }).then(() => {
+          console.log('[BACKGROUND] Successfully sent wordUpdated message from word fetch alarm');
+        }).catch(error => {
+          // This error is expected if no popup is open to receive the message
+          if (!error.message.includes('Could not establish connection')) {
+            console.error('[BACKGROUND] Error sending word update message from word fetch alarm:', error);
+          } else {
+            console.log('[BACKGROUND] No popup open to receive message from word fetch alarm (expected)');
+          }
+        });
       } else {
         console.warn('Failed to fetch new word from scheduled alarm')
       }
@@ -1033,7 +1189,11 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
     
     if (request.action === 'getLatestWord') {
       try {
-        const word = await getLatestWord()
+        // Default to false to ensure the controller gets the current word
+        // This can be overridden by explicitly setting forceNew=true in the request
+        const forceNew = request.forceNew === true ? true : false;
+        console.log(`getLatestWord message handler called with forceNew=${forceNew}`);
+        const word = await getLatestWord(forceNew)
         return { success: true, word }
       } catch (error) {
         console.error('Error handling getLatestWord:', error)
