@@ -1,4 +1,4 @@
-import { Library, Settings, RefreshCw } from 'lucide-react'
+import { Library, Settings } from 'lucide-react'
 import HeaderTitle from '@/resources/components/header-title.tsx'
 import { Separator } from '@/components/ui/separator.tsx'
 import MenuItem from '@/resources/components/menu-item.tsx'
@@ -59,20 +59,25 @@ const NextWordCountdown = () => {
 
     const updateCountdown = (remainingMs: number) => {
       if (remainingMs <= 0) {
-        setCountdown('Any moment now')
+        setCountdown('00m')
       } else {
         // Convert to hours, minutes, seconds
         const hours = Math.floor(remainingMs / (1000 * 60 * 60))
         const minutes = Math.floor((remainingMs % (1000 * 60 * 60)) / (1000 * 60))
-        const seconds = Math.floor((remainingMs % (1000 * 60)) / 1000)
+        
+        // If less than 60 seconds but greater than 0, still show as 01m
+        if (hours === 0 && minutes === 0 && remainingMs > 0) {
+          setCountdown('01m')
+          return
+        }
 
-        // Format the countdown string with padded zeros for minutes and seconds
+        // Format the countdown string with padded zeros for minutes only
         let countdownStr = ''
         if (hours > 0) {
           countdownStr += `${hours.toString().padStart(2, '0')}h `
         }
-        // Always show seconds with 2 digits
-        countdownStr += `${minutes.toString().padStart(2, '0')}m ${seconds.toString().padStart(2, '0')}s`
+        // Always show minutes with 2 digits, no seconds
+        countdownStr += `${minutes.toString().padStart(2, '0')}m`
 
         setCountdown(countdownStr)
       }
@@ -85,11 +90,11 @@ const NextWordCountdown = () => {
     <TooltipProvider>
       <Tooltip>
         <TooltipTrigger asChild>
-          <div className="flex items-center underline underline-offset-2 text-xs text-base-content/70 cursor-pointer">
-            <span className='text-sm font-bold'>{countdown}</span>
+          <div className="flex items-center text-xs text-base-content/70 cursor-pointer">
+            <span className='text-xs font-bold text-muted-foreground'>in {countdown}</span>
           </div>
         </TooltipTrigger>
-        <TooltipContent>
+        <TooltipContent className='mr-4'>
           <p>Time until next word notification</p>
         </TooltipContent>
       </Tooltip>
@@ -102,7 +107,6 @@ const HomeScreen = () => {
   const [displayedWord, setDisplayedWord] = useState<IWord | null>(null)
   const [isTransitioning, setIsTransitioning] = useState(false)
   const [fadeState, setFadeState] = useState('in') // 'in' or 'out'
-  const [shouldRefresh, setShouldRefresh] = useState(false)
   const lastWordIdRef = useRef<string | null>(null)
   // No longer needed as we're using a simpler approach for the countdown
 
@@ -140,19 +144,6 @@ const HomeScreen = () => {
     }
   }, [newWord, isFetchingNewWord, displayedWord])
 
-  // Handle manual refresh
-  useEffect(() => {
-    if (shouldRefresh) {
-      const refresh = async () => {
-        console.log('[HOME-SCREEN] Manual refresh triggered')
-        setIsTransitioning(true)
-        setFadeState('out')
-        await fetchNewWord()
-        setShouldRefresh(false)
-      }
-      refresh()
-    }
-  }, [shouldRefresh, fetchNewWord])
 
   // Handle animation transitions
   const handleTransitionEnd = () => {
@@ -172,12 +163,6 @@ const HomeScreen = () => {
     }
   }
 
-  // Manual refresh handler
-  const handleRefresh = () => {
-    console.log('[HOME-SCREEN] Refresh button clicked')
-    setShouldRefresh(true)
-  }
-
   return (
     <div className='w-[400px] min-h-[600px] scrollbar-hide'>
       <div className='flex w-full flex-row justify-between p-4 border-b-[1px] border-base-content/20'>
@@ -193,26 +178,10 @@ const HomeScreen = () => {
             onClick={() => goTo(SettingsScreen)}
           />
         </div>
-        <NextWordCountdown />
-        <div className='flex flex-row gap-4 justify-center items-center'>
+        
+        <div className='flex flex-row gap-2 justify-center items-center'>
           <HeaderTitle title='WordDrop' />
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <button 
-                onClick={handleRefresh} 
-                disabled={isFetchingNewWord || isTransitioning}
-                className="p-1 rounded-full hover:bg-base-content/10 transition-colors"
-              >
-                <RefreshCw 
-                  size={18} 
-                  className={`text-base-content/70 ${isFetchingNewWord || isTransitioning ? 'animate-spin' : ''}`} 
-                />
-              </button>
-            </TooltipTrigger>
-            <TooltipContent>
-              <p>Refresh word</p>
-            </TooltipContent>
-          </Tooltip>
+          <NextWordCountdown />
         </div>
       </div>
       <div className='flex flex-col gap-4 mt-2'>

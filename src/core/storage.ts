@@ -7,7 +7,7 @@ enum AuthProvider {
 }
 
 export type DifficultyLevel = 'beginner' | 'intermediate' | 'advanced'
-export type NotificationFrequency = '1' | '30' | '60' | '90' | '120' | '180' | '-'
+export type NotificationFrequency = '30' | '60' | '90' | '120' | '180' | '-'
 
 interface WordsCache {
   date: string

@@ -5,6 +5,7 @@ import WordReference from '@/resources/components/word-reference.tsx'
 import Word from '@/resources/components/word.tsx'
 import SimilarWords from '@/resources/components/similar-words.tsx'
 import { IWord } from '@/app/models/word'
+import { useEffect } from 'react'
 
 interface WordDetailScreenProps {
   word: IWord
@@ -13,6 +14,15 @@ interface WordDetailScreenProps {
 const WordDetailScreen = ({ word }: WordDetailScreenProps) => {
   // Use the first news item for the reference section if available
   const firstNewsItem = word.news && word.news.length > 0 ? word.news[0] : null
+  
+  // Scroll to top when component renders, with a 300ms delay
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      window.scrollTo({ top: 0, behavior: 'smooth' })
+    }, 100)
+    
+    return () => clearTimeout(timer)
+  }, [word.id])
   
   return (
     <div className='w-[400px] min-h-[600px] scrollbar-hide'>

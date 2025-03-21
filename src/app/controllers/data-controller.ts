@@ -139,7 +139,7 @@ const useDataControllerStore = create<IDataController>((set) => ({
     }
   },
   
-  notificationFrequency: '1',
+  notificationFrequency: '30',
   getNotificationFrequency: async () => {
     const storage = useStorageStore.getState()
     const frequency = await storage.getNotificationFrequency()
