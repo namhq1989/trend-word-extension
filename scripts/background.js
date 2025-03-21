@@ -890,22 +890,10 @@ async function createNotificationAlarm(frequency) {
     return
   }
 
-  // Get environment value from storage
+  // Parse frequency to minutes
+  const minutes = parseInt(frequency)
   const env = await getEnvironment()
-
-  // Convert to minutes based on environment
-  let minutes
-  if (env === 'develop') {
-    // In develop mode, frequency is already in minutes
-    minutes = parseInt(frequency)
-    console.log(`Development mode: setting alarm to ${minutes} minutes`)
-  } else {
-    // In release mode, convert hours to minutes
-    minutes = parseInt(frequency) * 60
-    console.log(
-      `Release mode: setting alarm to ${minutes} minutes (${frequency} hours)`,
-    )
-  }
+  console.log(`${env === 'develop' ? 'Development' : 'Release'} mode: setting alarm to ${minutes} minutes`)
 
   // Clear any existing alarm first
   chrome.alarms.clear(NOTIFICATION_ALARM_NAME, () => {
