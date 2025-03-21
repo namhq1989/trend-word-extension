@@ -354,7 +354,7 @@ const SettingsScreen = () => {
             </div>
             <div className='flex bg-container p-4 justify-between items-center'>
               <p className='text-sm'>Version</p>
-              <p className='text-sm'>1.0.0</p>
+              <p className='text-sm'>{import.meta.env.VITE_VERSION}</p>
             </div>
             <div className='flex flex-col gap-4 mt-2 px-2'>
               {/*<div className='flex gap-2 items-center cursor-pointer'>*/}
