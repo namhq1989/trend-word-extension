@@ -102,20 +102,6 @@ const useDataControllerStore = create<IDataController>((set) => ({
     const storage = useStorageStore.getState()
     const selectedLevels = await storage.getSelectedDifficultyLevels()
     
-    // If no levels are selected yet, we'll try to use the single level from the old setting
-    if (selectedLevels.length === 0) {
-      const singleLevel = await storage.getDifficultyLevel()
-      if (singleLevel) {
-        await storage.saveSelectedDifficultyLevels([singleLevel])
-        const updatedLevels = difficultyLevelOptions.map((level) => ({
-          ...level,
-          isSelected: level.id === singleLevel
-        }))
-        set({ difficultyLevels: updatedLevels })
-        return
-      }
-    }
-    
     const updatedLevels = difficultyLevelOptions.map((level) => ({
       ...level,
       isSelected: selectedLevels.includes(level.id)
@@ -153,7 +139,7 @@ const useDataControllerStore = create<IDataController>((set) => ({
     }
   },
   
-  notificationFrequency: '1',
+  notificationFrequency: '30',
   getNotificationFrequency: async () => {
     const storage = useStorageStore.getState()
     const frequency = await storage.getNotificationFrequency()
