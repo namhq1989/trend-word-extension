@@ -601,6 +601,22 @@ async function fetchNewWord() {
       fetchedCategories: [],
     }
 
+    // Check if the date has changed since last time
+    const todayDateString = getTodayDateString()
+    const cacheDate = cache.date || todayDateString
+    
+    // Reset counter if it's a new day
+    if (cacheDate !== todayDateString) {
+      console.log('New day detected, resetting word counter')
+      cache.date = todayDateString
+      cache.totalCalled = 0
+      
+      // Save the updated cache with reset counter
+      await new Promise((resolve) => {
+        chrome.storage.local.set({ wordsCache: cache }, resolve)
+      })
+    }
+
     // Check if we've exceeded max words per day
     const totalCalled = cache.totalCalled || 0
     if (totalCalled >= maxWordsPerDay) {
@@ -739,6 +755,7 @@ async function fetchNewWord() {
     // Update cache information
     const updatedCache = {
       ...cache,
+      date: getTodayDateString(), // Ensure date is always current
       totalCalled: (cache.totalCalled || 0) + 1,
       lastApiCallTime: Date.now(),
       lastFetchedWord: word,
@@ -946,14 +963,26 @@ chrome.alarms.onAlarm.addListener(async (alarm) => {
           break; // Not enough words to find a different one
         }
         
-        // Filter out the current word
-        const otherWords = allWords.filter(word => word.id !== currentWord.id);
+        // Sort words by date in descending order (newest first)
+        // Assuming each word has a 'createdAt' or 'updatedAt' field
+        const sortedWords = [...allWords].sort((a, b) => {
+          const dateA = a.createdAt || a.updatedAt || 0;
+          const dateB = b.createdAt || b.updatedAt || 0;
+          return new Date(dateB) - new Date(dateA);
+        });
         
-        if (otherWords.length > 0) {
-          // Get a random word from the filtered list
-          const randomIndex = Math.floor(Math.random() * otherWords.length);
-          newWord = otherWords[randomIndex];
-          console.log(`Attempt ${attempts + 1}: Selected different word ${newWord.word}`);
+        // Take only the 5 latest words
+        const latestWords = sortedWords.slice(0, 5);
+        console.log(`Found ${latestWords.length} latest words to choose from`);
+        
+        // Filter out the current word from the latest words
+        const otherLatestWords = latestWords.filter(word => word.id !== currentWord.id);
+        
+        if (otherLatestWords.length > 0) {
+          // Get a random word from the filtered latest words
+          const randomIndex = Math.floor(Math.random() * otherLatestWords.length);
+          newWord = otherLatestWords[randomIndex];
+          console.log(`Attempt ${attempts + 1}: Selected different word ${newWord.word} from latest words`);
           break; // We found a different word, exit the loop
         }
         

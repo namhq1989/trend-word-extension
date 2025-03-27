@@ -151,7 +151,7 @@ const useDataControllerStore = create<IDataController>((set) => ({
     set({ notificationFrequency: frequency })
   },
   
-  maxWordsPerDay: 10,
+  maxWordsPerDay: 50,
   getMaxWordsPerDay: async () => {
     const storage = useStorageStore.getState()
     const count = await storage.getMaxWordsPerDay()
