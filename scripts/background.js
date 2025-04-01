@@ -420,51 +420,100 @@ function getLatestWord(forceNew = false) {
         return;
       }
       
-      const transaction = db.transaction([WORDS_STORE_NAME], 'readonly')
-      const store = transaction.objectStore(WORDS_STORE_NAME)
-      const request = store.getAll()
-
+      // Define a cutoff date (e.g., 7 days ago)
+      const cutoffDate = new Date();
+      cutoffDate.setDate(cutoffDate.getDate() - 3);
+      console.log('Using cutoff date for recent words:', cutoffDate.toISOString());
+      
+      // Maximum number of recent words to retrieve
+      const maxWordsToRetrieve = 20;
+      
+      // Use a transaction and get the date index
+      const transaction = db.transaction([WORDS_STORE_NAME], 'readonly');
+      const store = transaction.objectStore(WORDS_STORE_NAME);
+      const dateIndex = store.index('date');
+      
+      // Open cursor on the date index in reverse order (newest first)
+      const request = dateIndex.openCursor(null, 'prev');
+      
+      // Array to hold recent words
+      const recentWords = [];
+      
       request.onerror = (event) => {
-        console.error('Error getting words from IndexedDB:', event.target.error)
-        reject(event.target.error)
-      }
-
-      request.onsuccess = () => {
-        const words = request.result
+        console.error('Error getting words from IndexedDB:', event.target.error);
+        reject(event.target.error);
+      };
+      
+      request.onsuccess = (event) => {
+        const cursor = event.target.result;
         
-        if (!words || words.length === 0) {
-          // No words in database yet
-          resolve(null)
-          return
-        }
-
-        // Sort by date (newest first)
-        words.sort((a, b) => {
-          const dateA = new Date(a.date || 0)
-          const dateB = new Date(b.date || 0)
-          return dateB - dateA
-        })
-
-        // Try to get a different word if the current one matches
-        let attempts = 0;
-        let maxAttempts = 5;
-        let selectedWord = words[0];
-        
-        // If we have a current word and it matches the latest word, try to find a different one
-        if (forceNew && currentWord && currentWord.id === selectedWord.id && words.length > 1) {
-          console.log('Current word matches latest word, trying to find a different one');
+        if (cursor && recentWords.length < maxWordsToRetrieve) {
+          const wordDate = new Date(cursor.value.date || 0);
           
-          while (attempts < maxAttempts && currentWord.id === selectedWord.id) {
-            // Get a random index between 0 and words.length-1 (excluding the first word if it's the current one)
-            const randomIndex = Math.floor(Math.random() * (words.length - 1)) + 1;
-            selectedWord = words[randomIndex];
-            attempts++;
-            console.log(`Attempt ${attempts}: Selected word ${selectedWord.word}`);
+          // Only include words newer than the cutoff date
+          if (wordDate >= cutoffDate) {
+            recentWords.push(cursor.value);
+            console.log(`Added recent word: ${cursor.value.word}, date: ${wordDate.toISOString()}`);
           }
           
-          if (attempts >= maxAttempts && currentWord.id === selectedWord.id) {
-            console.log(`Reached max attempts (${maxAttempts}), using latest word anyway`);
-            selectedWord = words[0];
+          cursor.continue();
+        } else {
+          // If no recent words found within cutoff, get at least one most recent word
+          if (recentWords.length === 0) {
+            console.log('No words found within date range, falling back to most recent word');
+            
+            // Create a new request to get the most recent word regardless of date
+            const fallbackRequest = dateIndex.openCursor(null, 'prev');
+            
+            fallbackRequest.onsuccess = (fallbackEvent) => {
+              const fallbackCursor = fallbackEvent.target.result;
+              
+              if (fallbackCursor) {
+                recentWords.push(fallbackCursor.value);
+                console.log(`Added fallback word: ${fallbackCursor.value.word}`);
+                processRecentWords();
+              } else {
+                // No words at all in the database
+                console.log('No words found in database');
+                resolve(null);
+              }
+            };
+            
+            fallbackRequest.onerror = (fallbackEvent) => {
+              console.error('Error in fallback request:', fallbackEvent.target.error);
+              reject(fallbackEvent.target.error);
+            };
+          } else {
+            // Process the words we've collected
+            processRecentWords();
+          }
+        }
+      };
+      
+      // Function to process the collected recent words
+      function processRecentWords() {
+        if (recentWords.length === 0) {
+          // No words found at all
+          resolve(null);
+          return;
+        }
+        
+        // By default, use the most recent word
+        let selectedWord = recentWords[0];
+        
+        // If we have a current word and it matches the most recent word, try to find a different one
+        if (forceNew && currentWord && currentWord.id === selectedWord.id && recentWords.length > 1) {
+          console.log('Current word matches most recent word, trying to find a different one');
+          
+          // Create an array of candidate words (excluding the current word)
+          const candidateWords = recentWords.filter(word => word.id !== currentWord.id);
+          
+          if (candidateWords.length > 0) {
+            // Select a random word from candidates
+            selectedWord = candidateWords[Math.floor(Math.random() * candidateWords.length)];
+            console.log(`Selected different word: ${selectedWord.word}`);
+          } else {
+            console.log('No alternative words available, using most recent word');
           }
         }
         
@@ -491,7 +540,7 @@ function getLatestWord(forceNew = false) {
         resolve(selectedWord);
       }
     });
-  })
+  });
 }
 
 // Get the remaining time until the next notification
