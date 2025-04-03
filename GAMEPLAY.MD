@@ -1,19 +1,15 @@
 # Word Game Specifications
 
 ## Game Overview
-A word search game that utilizes words stored in IndexedDB from a Chrome extension. Players find words by connecting letters in a grid, with two difficulty levels available.
+A word search game that utilizes words stored in IndexedDB from a Chrome extension. Players find words by connecting letters in a grid.
 
 ## Core Gameplay
 
 ### Basic Mechanics
-- Grid-based word search (7×7 grid)
+- Grid-based word search (9×9 grid)
 - Words are hidden within the grid
 - Players select letters to form words
 - Successful word finds are highlighted and marked as complete
-
-### Difficulty Levels
-- **Easy Mode**: Letters can be selected in any order, regardless of position
-- **Hard Mode**: Letters must be adjacent (horizontally, vertically, or diagonally)
 
 ### Scoring System
 - Points awarded based on word difficulty level:
@@ -27,26 +23,26 @@ A word search game that utilizes words stored in IndexedDB from a Chrome extensi
 
 ### Game Screen Components
 1. **Header Bar**
-   - Difficulty toggle switch
    - Score display
-   - Timer (optional)
+   - Streak counter
 
 2. **Game Grid**
-   - 7×7 letter grid
+   - 9×9 letter grid
    - Clear letter visibility with sufficient spacing
    - Highlight for selected letters
    - Animation for correct word completion
 
 3. **Word List Panel**
-   - List of words to find (or count of remaining words)
+   - List of words to find with character count
    - Found words section (crossed out or color-coded)
    - Word difficulty indicators (Beginner, Intermediate, Advanced)
    - Points value for each word
 
 4. **Control Panel**
    - Reset button
-   - Hint button (reveals a letter or word)
-   - Settings button
+   - Clear selection button
+   - Submit button
+   - Word-specific hint buttons
 
 ### Interaction Design
 - **Letter Selection**:
