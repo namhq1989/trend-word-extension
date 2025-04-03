@@ -1,5 +1,5 @@
 import { useEffect, useState, useCallback } from 'react'
-import { LifeBuoy, RefreshCw, Info, Volume2 } from 'lucide-react'
+import { LifeBuoy, RefreshCw, Info, Volume2, Timer, Hash, AlignJustify, Eye } from 'lucide-react'
 import HeaderTitle from '@/resources/components/header-title.tsx'
 import BackButton from '@/resources/components/back-button.tsx'
 import { Badge } from '@/components/ui/badge.tsx'
@@ -67,6 +67,15 @@ const GameScreen = () => {
   const [showMaskedWords, setShowMaskedWords] = useState(false) // For testing - toggle to show/hide masked words
   const [notEnoughWords, setNotEnoughWords] = useState(false) // Track if there are enough words
   
+  // Game settings state
+  const [showSettings, setShowSettings] = useState(true) // Show settings screen by default
+  const [wordCount, setWordCount] = useState<number>(7) // Default: 7 words
+  const [maxWordLength, setMaxWordLength] = useState<number>(8) // Default: 8 characters
+  const [timeLimit, setTimeLimit] = useState<number>(5) // Default: 5 minutes
+  const [autoRevealCount, setAutoRevealCount] = useState<number>(2) // Default: 2 characters
+  const [timeRemaining, setTimeRemaining] = useState<number | null>(null) // Time remaining in seconds
+  const [timerActive, setTimerActive] = useState(false) // Track if timer is active
+  
   // Audio player hook
   const { playAudio } = useAudioPlayer()
   
@@ -119,6 +128,35 @@ const GameScreen = () => {
   useEffect(() => {
     fetchWords()
   }, [fetchWords])
+  
+  // Timer effect
+  useEffect(() => {
+    let timer: NodeJS.Timeout | null = null;
+    
+    if (timerActive && timeRemaining !== null && timeRemaining > 0) {
+      timer = setInterval(() => {
+        setTimeRemaining(prev => {
+          if (prev === null || prev <= 1) {
+            if (timer) clearInterval(timer);
+            return 0;
+          }
+          return prev - 1;
+        });
+      }, 1000);
+    } else if (timeRemaining === 0) {
+      // Time's up - reveal all words
+      const updatedWordsToFind = wordsToFind.map(word => ({
+        ...word,
+        found: true
+      }));
+      setWordsToFind(updatedWordsToFind);
+      setTimerActive(false);
+    }
+    
+    return () => {
+      if (timer) clearInterval(timer);
+    };
+  }, [timerActive, timeRemaining, wordsToFind]);
 
   // Generate game grid when words are loaded
   useEffect(() => {
@@ -129,11 +167,11 @@ const GameScreen = () => {
 
   // Initialize the game with words and grid
   const initializeGame = () => {
-    // Select words for the game (always exactly 7 words)
-    const gameWords = selectGameWords(words, 7)
+    // Select words for the game based on settings
+    const gameWords = selectGameWords(words, wordCount)
     
     // Check if we have enough words to start the game
-    if (gameWords.length < 7) {
+    if (gameWords.length < wordCount) {
       setNotEnoughWords(true)
       setGameStarted(false)
       return
@@ -145,10 +183,10 @@ const GameScreen = () => {
     // Create the grid and place words
     const { grid, placedWords } = createGameGrid(gameWords)
     
-    // Ensure we have exactly 7 words
-    if (placedWords.length !== 7) {
-      console.warn(`Expected 7 placed words, but got ${placedWords.length}. Retrying...`)
-      // If we don't have exactly 7 words, try again
+    // Ensure we have exactly the requested number of words
+    if (placedWords.length !== wordCount) {
+      console.warn(`Expected ${wordCount} placed words, but got ${placedWords.length}. Retrying...`)
+      // If we don't have exactly the requested number of words, try again
       initializeGame()
       return
     }
@@ -157,14 +195,21 @@ const GameScreen = () => {
     setWordsToFind(placedWords)
     setScore(0)
     setGameStarted(true)
+    setShowSettings(false)
+    
+    // Start timer if time limit is set
+    if (timeLimit > 0) {
+      setTimeRemaining(timeLimit * 60) // Convert minutes to seconds
+      setTimerActive(true)
+    }
   }
 
   // Select a subset of words for the game
   const selectGameWords = (allWords: IWord[], count: number): IWord[] => {
-    // Filter words that are suitable for the game (not too long, not too short)
+    // Filter words that are suitable for the game based on settings
     const suitableWords = allWords.filter(word => {
       const wordText = word.word.toLowerCase()
-      return wordText.length >= 3 && wordText.length <= 9 && /^[a-z]+$/.test(wordText)
+      return wordText.length >= 3 && wordText.length <= maxWordLength && /^[a-z]+$/.test(wordText)
     })
     
     // Shuffle the suitable words for randomness
@@ -288,11 +333,11 @@ const GameScreen = () => {
               const wordColor = getWordColor(placedWords.length)
               
               // Add to placed words list
-              // Generate 2 random indices to auto-reveal for this word
+              // Generate auto-reveal indices based on settings
               const autoRevealIndices: number[] = [];
-              // Only add auto-reveal indices if word length is > 2
-              if (wordText.length > 2) {
-                while (autoRevealIndices.length < 2 && autoRevealIndices.length < wordText.length) {
+              // Only add auto-reveal indices if word length is > autoRevealCount
+              if (wordText.length > autoRevealCount && autoRevealCount > 0) {
+                while (autoRevealIndices.length < autoRevealCount && autoRevealIndices.length < wordText.length) {
                   const randomIndex = Math.floor(Math.random() * wordText.length);
                   if (!autoRevealIndices.includes(randomIndex)) {
                     autoRevealIndices.push(randomIndex);
@@ -309,7 +354,7 @@ const GameScreen = () => {
                 color: wordColor,
                 hintRevealed: false,
                 revealedCharIndices: autoRevealIndices,
-                definitions: wordObj.definitions.splice(0, 2) || []
+                definitions: wordObj.definitions ? [...wordObj.definitions].slice(0, 2) : []
               })
               
               placed = true
@@ -369,11 +414,11 @@ const GameScreen = () => {
               const wordColor = getWordColor(placedWords.length)
               
               // Add to placed words list
-              // Generate 2 random indices to auto-reveal for this word
+              // Generate auto-reveal indices based on settings
               const autoRevealIndices: number[] = [];
-              // Only add auto-reveal indices if word length is > 2
-              if (wordText.length > 2) {
-                while (autoRevealIndices.length < 2 && autoRevealIndices.length < wordText.length) {
+              // Only add auto-reveal indices if word length is > autoRevealCount
+              if (wordText.length > autoRevealCount && autoRevealCount > 0) {
+                while (autoRevealIndices.length < autoRevealCount && autoRevealIndices.length < wordText.length) {
                   const randomIndex = Math.floor(Math.random() * wordText.length);
                   if (!autoRevealIndices.includes(randomIndex)) {
                     autoRevealIndices.push(randomIndex);
@@ -390,7 +435,7 @@ const GameScreen = () => {
                 color: wordColor,
                 hintRevealed: false,
                 revealedCharIndices: autoRevealIndices,
-                definitions: wordObj.definitions.splice(0, 2) || []
+                definitions: wordObj.definitions ? [...wordObj.definitions].slice(0, 2) : []
               })
               
               placed = true
@@ -563,7 +608,23 @@ const GameScreen = () => {
   const resetGame = () => {
     setGameStarted(false)
     setSelectedCells([])
+    setShowSettings(true)
+    setTimerActive(false)
+    setTimeRemaining(null)
     fetchWords()
+  }
+  
+  // Start game with current settings
+  const startGame = () => {
+    initializeGame()
+  }
+  
+  // Reset settings to defaults
+  const resetSettings = () => {
+    setWordCount(7)
+    setMaxWordLength(8)
+    setTimeLimit(5)
+    setAutoRevealCount(2)
   }
 
   // Show a hint for a specific word by revealing one random character
@@ -670,7 +731,8 @@ const GameScreen = () => {
 
 
   // Check if game is complete
-  const isGameComplete = wordsToFind.every(w => w.found)
+  // Game is complete only if there are enough words (based on settings) AND all words are found
+  const isGameComplete = wordsToFind.length >= wordCount && wordsToFind.every(w => w.found)
   
   // Get random congratulation content when game is complete
   const congratulation = getRandomCongratulation()
@@ -680,7 +742,7 @@ const GameScreen = () => {
       <div className='flex w-full flex-row justify-between p-4 border-b-[1px]'>
         <BackButton />
         <HeaderTitle title='Word Game' />
-        <div className='flex items-center gap-2'>
+        <div className='flex items-center gap-3'>
           <TooltipProvider>
             <Tooltip>
               <TooltipTrigger asChild>
@@ -688,6 +750,22 @@ const GameScreen = () => {
               </TooltipTrigger>
               <TooltipContent>
                 <p>Reset Game</p>
+              </TooltipContent>
+            </Tooltip>
+          </TooltipProvider>
+          <TooltipProvider>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Info className='cursor-pointer' size={20} />
+              </TooltipTrigger>
+              <TooltipContent className='w-[300px] p-4 mr-4'>
+                <div className='flex flex-col gap-1'>
+                  <p className='font-bold'>Word Drop Game</p>
+                  <p className='text-sm'>Find hidden words in the grid by selecting connected letters. Words can be placed horizontally, vertically, diagonally, or in complex patterns.</p>
+                  <p className='text-sm mt-1'>• Use hints to reveal letters</p>
+                  <p className='text-sm'>• Points vary based on word difficulty</p>
+                  <p className='text-sm'>• Find all words to complete the game</p>
+                </div>
               </TooltipContent>
             </Tooltip>
           </TooltipProvider>
@@ -718,15 +796,118 @@ const GameScreen = () => {
           <div className='p-6 bg-muted rounded-md text-center max-w-md'>
             <h2 className='text-2xl font-bold text-primary mb-2'>Not Enough Words</h2>
             <p className='text-base mb-4'>
-              You need at least 7 suitable words to play the Word Game. Please collect more words by browsing the web or adding words to your collection.
+              You need at least {wordCount} suitable words to play the Word Game. Please collect more words by browsing the web or adding words to your collection.
             </p>
             <p className='text-sm text-muted-foreground'>
-              Suitable words are 3-9 letters long and contain only alphabetic characters.
+              Suitable words are 3-{maxWordLength} letters long and contain only alphabetic characters.
             </p>
           </div>
           <Button onClick={resetGame} className='cursor-pointer'>
             Try Again
           </Button>
+        </div>
+      ) : showSettings ? (
+        <div className='flex flex-col p-6 gap-6'>
+          <div className='text-center mb-2'>
+            <h2 className='text-2xl font-bold text-primary'>Game Settings</h2>
+            <p className='text-sm text-muted-foreground mt-1'>Customize your game experience</p>
+          </div>
+          
+          {/* Number of Words Setting */}
+          <div className='flex flex-col gap-2'>
+            <div className='flex items-center gap-2'>
+              <Hash size={18} />
+              <span className='font-medium'>Number of Words</span>
+            </div>
+            <div className='flex gap-2 mt-1'>
+              {[5, 7, 10].map(num => (
+                <Button 
+                  key={num}
+                  variant={wordCount === num ? 'default' : 'outline'}
+                  className={`flex-1 ${wordCount === num ? 'bg-primary' : ''}`}
+                  onClick={() => setWordCount(num)}
+                >
+                  {num}
+                </Button>
+              ))}
+            </div>
+          </div>
+          
+          {/* Max Word Length Setting */}
+          <div className='flex flex-col gap-2'>
+            <div className='flex items-center gap-2'>
+              <AlignJustify size={18} />
+              <span className='font-medium'>Max Word Length</span>
+            </div>
+            <div className='flex gap-2 mt-1'>
+              {[6, 8, 10].map(num => (
+                <Button 
+                  key={num}
+                  variant={maxWordLength === num ? 'default' : 'outline'}
+                  className={`flex-1 ${maxWordLength === num ? 'bg-primary' : ''}`}
+                  onClick={() => setMaxWordLength(num)}
+                >
+                  {num} chars
+                </Button>
+              ))}
+            </div>
+          </div>
+          
+          {/* Time Limit Setting */}
+          <div className='flex flex-col gap-2'>
+            <div className='flex items-center gap-2'>
+              <Timer size={18} />
+              <span className='font-medium'>Time Limit</span>
+            </div>
+            <div className='flex gap-2 mt-1'>
+              {[3, 5, 10].map(num => (
+                <Button 
+                  key={num}
+                  variant={timeLimit === num ? 'default' : 'outline'}
+                  className={`flex-1 ${timeLimit === num ? 'bg-primary' : ''}`}
+                  onClick={() => setTimeLimit(num)}
+                >
+                  {num} min
+                </Button>
+              ))}
+            </div>
+          </div>
+          
+          {/* Auto-Revealed Characters Setting */}
+          <div className='flex flex-col gap-2'>
+            <div className='flex items-center gap-2'>
+              <Eye size={18} />
+              <span className='font-medium'>Auto-Revealed Characters</span>
+            </div>
+            <div className='flex gap-2 mt-1'>
+              {[0, 1, 2].map(num => (
+                <Button 
+                  key={num}
+                  variant={autoRevealCount === num ? 'default' : 'outline'}
+                  className={`flex-1 ${autoRevealCount === num ? 'bg-primary' : ''}`}
+                  onClick={() => setAutoRevealCount(num)}
+                >
+                  {num}
+                </Button>
+              ))}
+            </div>
+          </div>
+          
+          <div className='flex flex-col gap-3 mt-4'>
+            <Button 
+              className='w-full py-6 text-lg font-medium cursor-pointer'
+              onClick={startGame}
+            >
+              Play
+            </Button>
+            <Button 
+              variant='outline' 
+              className='w-full cursor-pointer'
+              onClick={resetSettings}
+            >
+              Reset Settings
+            </Button>
+          </div>
         </div>
       ) : (
         <div className='flex flex-col gap-4 p-4'>
@@ -736,7 +917,11 @@ const GameScreen = () => {
               <Badge variant='outline' className='text-base px-3 py-1'>
                 Score: {score}
               </Badge>
-              {/* Streak feature removed */}
+              {timeRemaining !== null && (
+                <Badge variant={timeRemaining < 60 ? 'destructive' : 'outline'} className='text-base px-3 py-1'>
+                  Time: {Math.floor(timeRemaining / 60)}:{(timeRemaining % 60).toString().padStart(2, '0')}
+                </Badge>
+              )}
               <TooltipProvider>
                 <Tooltip>
                   <TooltipTrigger asChild>
@@ -838,12 +1023,18 @@ const GameScreen = () => {
                           </TooltipTrigger>
                           <TooltipContent className='w-64 p-2'>
                             <div className='flex flex-col gap-2'>
-                              {word.definitions.map((def, i) => (
-                                <div key={i} className='mb-1'>
-                                  <span className='italic'>({def.pos}) </span>
-                                  <span className='text-xs'>{def.definition}</span>
+                              {word.definitions && word.definitions.length > 0 ? (
+                                word.definitions.map((def, i) => (
+                                  <div key={i} className='mb-1'>
+                                    <span className='italic'>({def.pos}) </span>
+                                    <span className='text-xs'>{def.definition}</span>
+                                  </div>
+                                ))
+                              ) : (
+                                <div className='mb-1'>
+                                  <span className='text-xs'>No definition available</span>
                                 </div>
-                              ))}
+                              )}
                             </div>
                           </TooltipContent>
                         </Tooltip>
