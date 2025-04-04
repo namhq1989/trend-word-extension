@@ -1,6 +1,15 @@
-import { useState } from 'react'
-import { Hash, AlignJustify, Timer, Eye } from 'lucide-react'
+import React, { useEffect } from 'react'
 import { Button } from '@/components/ui/button.tsx'
+import { Hash, AlignJustify, Timer, Eye } from 'lucide-react'
+import {
+  Select,
+  SelectContent,
+  SelectGroup,
+  SelectItem,
+  SelectLabel,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select'
 
 // Game settings interface
 export interface GameSettings {
@@ -12,133 +21,194 @@ export interface GameSettings {
 
 interface GameSettingsPhaseProps {
   onStartGame: (settings: GameSettings) => void
+  wordCount: number
+  setWordCount: React.Dispatch<React.SetStateAction<number>>
+  maxWordLength: number
+  setMaxWordLength: React.Dispatch<React.SetStateAction<number>>
+  timeLimit: number
+  setTimeLimit: React.Dispatch<React.SetStateAction<number>>
+  autoRevealCount: number
+  setAutoRevealCount: React.Dispatch<React.SetStateAction<number>>
 }
 
-const GameSettingsPhase = ({ onStartGame }: GameSettingsPhaseProps) => {
-  // Game settings state
-  const [wordCount, setWordCount] = useState<number>(7) // Default: 7 words
-  const [maxWordLength, setMaxWordLength] = useState<number>(8) // Default: 8 characters
-  const [timeLimit, setTimeLimit] = useState<number>(5) // Default: 5 minutes
-  const [autoRevealCount, setAutoRevealCount] = useState<number>(2) // Default: 2 characters
-
-  // Reset settings to defaults
-  const resetSettings = () => {
-    setWordCount(7)
-    setMaxWordLength(8)
-    setTimeLimit(5)
-    setAutoRevealCount(2)
-  }
-
-  // Start the game with current settings
+const GameSettingsPhase = ({
+  onStartGame,
+  wordCount,
+  setWordCount,
+  maxWordLength,
+  setMaxWordLength,
+  timeLimit,
+  setTimeLimit,
+  autoRevealCount,
+  setAutoRevealCount
+}: GameSettingsPhaseProps) => {
+  // Handle start game button click
   const handleStartGame = () => {
-    onStartGame({
+    // Create settings object
+    const settings = {
       wordCount,
       maxWordLength,
       timeLimit,
       autoRevealCount
+    }
+    
+    // Save settings to Chrome storage
+    chrome.storage.local.set({ wordDropGameSettings: settings }, () => {
+      if (chrome.runtime.lastError) {
+        console.error('Error saving game settings:', chrome.runtime.lastError)
+      }
     })
+    
+    // Pass settings to parent component
+    onStartGame(settings)
   }
+  
+  // Load settings from Chrome storage on component mount
+  useEffect(() => {
+    chrome.storage.local.get('wordDropGameSettings', (result) => {
+      if (chrome.runtime.lastError) {
+        console.error('Error loading game settings:', chrome.runtime.lastError)
+        return
+      }
+      
+      const settings = result.wordDropGameSettings
+      if (settings) {
+        // Update state with saved settings
+        if (settings.wordCount) setWordCount(settings.wordCount)
+        if (settings.maxWordLength) setMaxWordLength(settings.maxWordLength)
+        if (settings.timeLimit) setTimeLimit(settings.timeLimit)
+        if (settings.autoRevealCount) setAutoRevealCount(settings.autoRevealCount)
+      }
+    })
+  }, [])
+
+  // Setting option component for consistent styling
+  const SettingOption = ({ 
+    icon: Icon, 
+    title, 
+    children 
+  }: { 
+    icon: React.ElementType, 
+    title: string, 
+    children: React.ReactNode 
+  }) => (
+    <div className="flex bg-container p-4 justify-between items-center">
+      <div className="flex flex-row gap-2 items-center justify-center">
+        <Icon size={20} className="text-muted-foreground" />
+        <p className="text-sm text-foreground">{title}</p>
+      </div>
+      <div className="flex items-center gap-2">
+        {children}
+      </div>
+    </div>
+  )
 
   return (
-    <div className='flex flex-col p-6 gap-6'>
-      <div className='text-center mb-2'>
-        <h2 className='text-2xl font-bold text-primary'>Game Settings</h2>
-        <p className='text-sm text-muted-foreground mt-1'>Customize your game experience</p>
+    <div className="flex flex-col gap-6">
+      <div className="flex flex-col gap-2">
+        <h2 className="text-xl font-bold">Game Settings</h2>
+        <p className="text-sm text-muted-foreground">
+          Customize your word game experience before starting
+        </p>
       </div>
-      
-      {/* Number of Words Setting */}
-      <div className='flex flex-col gap-2'>
-        <div className='flex items-center gap-2'>
-          <Hash size={18} />
-          <span className='font-medium'>Number of Words</span>
-        </div>
-        <div className='flex gap-2 mt-1'>
-          {[5, 7, 10].map(num => (
-            <Button 
-              key={num}
-              variant={wordCount === num ? 'default' : 'outline'}
-              className={`flex-1 ${wordCount === num ? 'bg-primary' : ''}`}
-              onClick={() => setWordCount(num)}
-            >
-              {num}
-            </Button>
-          ))}
-        </div>
-      </div>
-      
-      {/* Max Word Length Setting */}
-      <div className='flex flex-col gap-2'>
-        <div className='flex items-center gap-2'>
-          <AlignJustify size={18} />
-          <span className='font-medium'>Max Word Length</span>
-        </div>
-        <div className='flex gap-2 mt-1'>
-          {[6, 8, 10].map(num => (
-            <Button 
-              key={num}
-              variant={maxWordLength === num ? 'default' : 'outline'}
-              className={`flex-1 ${maxWordLength === num ? 'bg-primary' : ''}`}
-              onClick={() => setMaxWordLength(num)}
-            >
-              {num} chars
-            </Button>
-          ))}
-        </div>
-      </div>
-      
-      {/* Time Limit Setting */}
-      <div className='flex flex-col gap-2'>
-        <div className='flex items-center gap-2'>
-          <Timer size={18} />
-          <span className='font-medium'>Time Limit</span>
-        </div>
-        <div className='flex gap-2 mt-1'>
-          {[3, 5, 10].map(num => (
-            <Button 
-              key={num}
-              variant={timeLimit === num ? 'default' : 'outline'}
-              className={`flex-1 ${timeLimit === num ? 'bg-primary' : ''}`}
-              onClick={() => setTimeLimit(num)}
-            >
-              {num} min
-            </Button>
-          ))}
-        </div>
-      </div>
-      
-      {/* Auto-Revealed Characters Setting */}
-      <div className='flex flex-col gap-2'>
-        <div className='flex items-center gap-2'>
-          <Eye size={18} />
-          <span className='font-medium'>Auto-Revealed Characters</span>
-        </div>
-        <div className='flex gap-2 mt-1'>
-          {[0, 1, 2].map(num => (
-            <Button 
-              key={num}
-              variant={autoRevealCount === num ? 'default' : 'outline'}
-              className={`flex-1 ${autoRevealCount === num ? 'bg-primary' : ''}`}
-              onClick={() => setAutoRevealCount(num)}
-            >
-              {num}
-            </Button>
-          ))}
-        </div>
-      </div>
-      
-      <div className='flex flex-col gap-3 mt-4'>
-        <Button 
-          className='w-full py-6 text-lg font-medium cursor-pointer'
-          onClick={handleStartGame}
+
+      <div className="flex flex-col gap-2">
+        <SettingOption 
+          icon={Hash} 
+          title="Number of Words"
         >
-          Play
-        </Button>
-        <Button 
-          variant='outline' 
-          className='w-full cursor-pointer'
-          onClick={resetSettings}
+          <Select
+            value={wordCount.toString()}
+            onValueChange={(value) => setWordCount(parseInt(value))}
+          >
+            <SelectTrigger className="w-[140px]">
+              <SelectValue placeholder="Select count" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectGroup>
+                <SelectLabel>Number of words</SelectLabel>
+                <SelectItem value="5">5 words</SelectItem>
+                <SelectItem value="7">7 words</SelectItem>
+                <SelectItem value="10">10 words</SelectItem>
+              </SelectGroup>
+            </SelectContent>
+          </Select>
+        </SettingOption>
+
+        <SettingOption 
+          icon={AlignJustify} 
+          title="Max Word Length"
         >
-          Reset Settings
+          <Select
+            value={maxWordLength.toString()}
+            onValueChange={(value) => setMaxWordLength(parseInt(value))}
+          >
+            <SelectTrigger className="w-[140px]">
+              <SelectValue placeholder="Select length" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectGroup>
+                <SelectLabel>Maximum word length</SelectLabel>
+                <SelectItem value="7">7 characters</SelectItem>
+                <SelectItem value="8">8 characters</SelectItem>
+                <SelectItem value="-1">No limit</SelectItem>
+              </SelectGroup>
+            </SelectContent>
+          </Select>
+        </SettingOption>
+
+        <SettingOption 
+          icon={Timer} 
+          title="Time Limit"
+        >
+          <Select
+            value={timeLimit.toString()}
+            onValueChange={(value) => setTimeLimit(parseInt(value))}
+          >
+            <SelectTrigger className="w-[140px]">
+              <SelectValue placeholder="Select time" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectGroup>
+                <SelectLabel>Time limit (minutes)</SelectLabel>
+                <SelectItem value="3">3 minutes</SelectItem>
+                <SelectItem value="5">5 minutes</SelectItem>
+                <SelectItem value="10">10 minutes</SelectItem>
+              </SelectGroup>
+            </SelectContent>
+          </Select>
+        </SettingOption>
+
+        <SettingOption 
+          icon={Eye} 
+          title="Auto-Reveal Letters"
+        >
+          <Select
+            value={autoRevealCount.toString()}
+            onValueChange={(value) => setAutoRevealCount(parseInt(value))}
+          >
+            <SelectTrigger className="w-[140px]">
+              <SelectValue placeholder="Select count" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectGroup>
+                <SelectLabel>Auto-reveal letters</SelectLabel>
+                <SelectItem value="0">None</SelectItem>
+                <SelectItem value="1">1 letter</SelectItem>
+                <SelectItem value="2">2 letters</SelectItem>
+              </SelectGroup>
+            </SelectContent>
+          </Select>
+        </SettingOption>
+      </div>
+
+      <div className="flex flex-col gap-4">
+        <Button 
+          onClick={handleStartGame} 
+          className="w-full"
+          size="lg"
+        >
+          Start Game
         </Button>
       </div>
     </div>

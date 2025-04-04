@@ -1,17 +1,14 @@
 import { useEffect, useState, useCallback } from 'react'
-import { LifeBuoy, RefreshCw, Info, Volume2, Timer, Hash, AlignJustify, Eye } from 'lucide-react'
+import { RefreshCw, Info } from 'lucide-react'
 import HeaderTitle from '@/resources/components/header-title.tsx'
 import BackButton from '@/resources/components/back-button.tsx'
-import { Badge } from '@/components/ui/badge.tsx'
-import { Button } from '@/components/ui/button.tsx'
-import { Switch } from '@/components/ui/switch.tsx'
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip.tsx'
 import Spinner from '@/components/ui/spinner'
 import { IWord } from '@/app/models/word.ts'
-import { IWordDefinition } from '@/app/models/word-data.ts'
 import { useAudioPlayer } from '@/resources/components/hooks/use-audio-player.ts'
-
-// Word difficulty scoring
+import GameSettingsPhase, { GameSettings } from '@/resources/components/game-settings-phase.tsx'
+import GamePlayPhase, { GridCell, WordToFind } from '@/resources/components/game-play-phase'
+import NotEnoughWordsMessage from '@/resources/components/not-enough-words-message'
 
 // Word difficulty scoring
 const WORD_DIFFICULTY_SCORES = {
@@ -31,34 +28,10 @@ const WORD_COLORS = [
   '#881337',  // Dark rose
 ]
 
-// Grid cell interface
-interface GridCell {
-  letter: string
-  row: number
-  col: number
-  selected: boolean
-  revealed: boolean
-  partOfWord: boolean
-}
-
-// Word to find interface
-interface WordToFind {
-  word: string
-  found: boolean
-  level: string
-  points: number
-  pointsEarned?: number // Actual points earned when found (including streak bonus)
-  letters: GridCell[]
-  color: string // Added color property for each word
-  hintRevealed: boolean // Track if hint was revealed for this word
-  revealedCharIndices: number[] // Indices of characters revealed by hints
-  definitions: IWordDefinition[] // Definitions from the IWord object
-}
-
 const GameScreen = () => {
   // Game state
   const [words, setWords] = useState<IWord[]>([])
-  const [loading, setLoading] = useState(true)
+  const [loading, setLoading] = useState(false)
   const [gameGrid, setGameGrid] = useState<GridCell[][]>([])
   const [wordsToFind, setWordsToFind] = useState<WordToFind[]>([])
   const [score, setScore] = useState(0)
@@ -158,12 +131,12 @@ const GameScreen = () => {
     };
   }, [timerActive, timeRemaining, wordsToFind]);
 
-  // Generate game grid when words are loaded
+  // Generate game grid when words are loaded and settings are confirmed
   useEffect(() => {
-    if (words.length > 0 && !gameStarted) {
+    if (words.length > 0 && !gameStarted && !showSettings) {
       initializeGame()
     }
-  }, [words, gameStarted])
+  }, [words, gameStarted, showSettings])
 
   // Initialize the game with words and grid
   const initializeGame = () => {
@@ -227,8 +200,17 @@ const GameScreen = () => {
 
   // Create the game grid and place words
   const createGameGrid = (gameWords: IWord[]) => {
-    // Initialize an empty 9x9 grid
-    const gridSize = 9
+    // Set grid size based on max word length
+    let gridSize = 9 // Default size
+    
+    // Adjust grid size based on max word length
+    if (maxWordLength === 6) {
+      gridSize = 7 // 7x7 grid for max word length of 6
+    } else if (maxWordLength === 8) {
+      gridSize = 9 // 9x9 grid for max word length of 8
+    } else if (maxWordLength === 10) {
+      gridSize = 11 // 11x11 grid for max word length of 10
+    }
     const grid: GridCell[][] = Array(gridSize).fill(null).map((_, row) => 
       Array(gridSize).fill(null).map((_, col) => ({
         letter: '',
@@ -515,94 +497,9 @@ const GameScreen = () => {
     return true
   }
 
-  // Handle cell click/selection
-  const handleCellClick = (cell: GridCell) => {
-    // Don't allow selection if game is complete
-    if (isGameComplete) return;
-    
-    // Check if cell is already selected
-    const cellIndex = selectedCells.findIndex(
-      c => c.row === cell.row && c.col === cell.col
-    )
-    
-    if (cellIndex !== -1) {
-      // If clicking the last selected cell, deselect it
-      if (cellIndex === selectedCells.length - 1) {
-        setSelectedCells(prev => prev.slice(0, -1))
-      }
-      // If clicking a cell in the middle, deselect all cells after it
-      else if (cellIndex < selectedCells.length - 1) {
-        setSelectedCells(prev => prev.slice(0, cellIndex + 1))
-      }
-    } else {
-      // Add cell to selection
-      setSelectedCells(prev => [...prev, cell])
-    }
-  }
+  // Game state management functions have been moved to GamePlayPhase component
 
-  // Check if selected cells form a valid word
-  const checkSelectedWord = () => {
-    if (selectedCells.length < 3) return
-    
-    const selectedWord = selectedCells.map(cell => cell.letter).join('')
-    
-    // Check if the word matches any of the words to find
-    const wordIndex = wordsToFind.findIndex(
-      w => w.word === selectedWord && !w.found
-    )
-    
-    if (wordIndex !== -1) {
-      // Word found!
-      const updatedWordsToFind = [...wordsToFind]
-      updatedWordsToFind[wordIndex].found = true
-      
-      // Update score
-      const targetWord = updatedWordsToFind[wordIndex]
-      const wordPoints = targetWord.points
-      const wordLength = targetWord.word.length
-      
-      // Calculate points reduction based on revealed characters
-      // Reserve 20 points minimum
-      const reservedPoints = 20
-      const pointsPerChar = (wordPoints - reservedPoints) / wordLength
-      
-      // Count revealed characters (excluding the 2 auto-revealed ones)
-      const revealedCount = Math.max(0, targetWord.revealedCharIndices.length - 2)
-      
-      // Calculate actual points earned
-      const pointsReduction = Math.round(pointsPerChar * revealedCount)
-      const actualPoints = Math.max(reservedPoints, wordPoints - pointsReduction)
-      
-      // Store the points earned for this word
-      updatedWordsToFind[wordIndex].pointsEarned = actualPoints
-      
-      // Add the points to the score
-      setScore(prev => prev + actualPoints)
-      
-      // Update the word's letters to use the selected cells instead of the predefined ones
-      // This ensures the correct cells are highlighted when a word is found
-      updatedWordsToFind[wordIndex].letters = [...selectedCells]
-      setWordsToFind(updatedWordsToFind)
-      
-      // Highlight the selected cells that form the word
-      const updatedGrid = [...gameGrid]
-      
-      selectedCells.forEach(cell => {
-        updatedGrid[cell.row][cell.col].revealed = true
-      })
-      
-      setGameGrid(updatedGrid)
-      
-      // Play the word's pronunciation using the existing audio player
-      const originalWord = words.find(w => w.word.toLowerCase() === targetWord.word.toLowerCase())
-      if (originalWord && originalWord.id) {
-        playAudio(originalWord.id)
-      }
-    }
-    
-    // Clear selection
-    setSelectedCells([])
-  }
+
 
   // Reset the game
   const resetGame = () => {
@@ -613,61 +510,6 @@ const GameScreen = () => {
     setTimeRemaining(null)
     fetchWords()
   }
-  
-  // Start game with current settings
-  const startGame = () => {
-    initializeGame()
-  }
-  
-  // Reset settings to defaults
-  const resetSettings = () => {
-    setWordCount(7)
-    setMaxWordLength(8)
-    setTimeLimit(5)
-    setAutoRevealCount(2)
-  }
-
-  // Show a hint for a specific word by revealing one random character
-  const showWordHint = (wordIndex: number) => {
-    if (wordIndex < 0 || wordIndex >= wordsToFind.length) return
-    if (wordsToFind[wordIndex].found) return
-    
-    const targetWord = wordsToFind[wordIndex]
-    const wordLength = targetWord.word.length
-    
-    // Get available indices (not yet revealed)
-    const availableIndices = Array.from({ length: wordLength }, (_, i) => i)
-      .filter(i => !targetWord.revealedCharIndices.includes(i))
-    
-    // If all characters are already revealed, do nothing
-    if (availableIndices.length === 0 || targetWord.revealedCharIndices.length >= wordLength) return
-    
-    // Select a random index to reveal
-    const randomIndex = availableIndices[Math.floor(Math.random() * availableIndices.length)]
-    
-    // Update the word's revealed indices
-    const updatedWordsToFind = [...wordsToFind]
-    updatedWordsToFind[wordIndex].revealedCharIndices.push(randomIndex)
-    updatedWordsToFind[wordIndex].hintRevealed = true
-    
-    // Calculate points per character (always reserve 20 points)
-    const wordPoints = targetWord.points
-    const reservedPoints = 20
-    const pointsPerChar = (wordPoints - reservedPoints) / wordLength
-    
-    // Calculate penalty for this hint (only count hints beyond the 2 auto-revealed characters)
-    const hintCount = targetWord.revealedCharIndices.length - 2
-    if (hintCount > 0) {
-      // Reduce the word's points for when it's found
-      const pointsReduction = Math.round(pointsPerChar * hintCount)
-      const newPoints = Math.max(reservedPoints, wordPoints - pointsReduction)
-      updatedWordsToFind[wordIndex].pointsEarned = newPoints
-    }
-    
-    setWordsToFind(updatedWordsToFind)
-  }
-
-
   
   // Toggle showing masked words (for testing)
   const toggleShowMaskedWords = () => {
@@ -687,35 +529,6 @@ const GameScreen = () => {
     return WORD_COLORS[index % WORD_COLORS.length]
   }
   
-  // Generate random congratulation content
-  const getRandomCongratulation = () => {
-    const titles = [
-      "Congratulations",
-      "Well Done",
-      "Excellent",
-      "Amazing",
-      "Fantastic",
-      "Brilliant",
-      "Superb",
-      "Outstanding"
-    ]
-    
-    const messages = [
-      "You've completed the Word Drop challenge",
-      "You've mastered all the words",
-      "Your word skills are impressive",
-      "You found all the hidden words",
-      "Your vocabulary prowess is remarkable",
-      "You've conquered the word puzzle",
-      "Word challenge completed successfully",
-      "You're a word-finding champion",
-    ]
-    
-    return {
-      title: titles[Math.floor(Math.random() * titles.length)],
-      message: messages[Math.floor(Math.random() * messages.length)]
-    }
-  }
   
 
 
@@ -730,41 +543,64 @@ const GameScreen = () => {
   }
 
 
+  // Handle starting the game with settings
+  const handleStartGame = (settings: GameSettings) => {
+    // Update game settings
+    setWordCount(settings.wordCount);
+    setMaxWordLength(settings.maxWordLength);
+    setTimeLimit(settings.timeLimit);
+    setAutoRevealCount(settings.autoRevealCount);
+    
+    // First hide settings screen, then fetch words
+    setShowSettings(false);
+    setGameStarted(false);
+    fetchWords(); // This will trigger initializeGame in the useEffect
+  }
+
   // Check if game is complete
-  // Game is complete only if there are enough words (based on settings) AND all words are found
-  const isGameComplete = wordsToFind.length >= wordCount && wordsToFind.every(w => w.found)
-  
-  // Get random congratulation content when game is complete
-  const congratulation = getRandomCongratulation()
+  const isGameComplete = wordsToFind.length >= wordCount && wordsToFind.every(w => w.found);
 
   return (
-    <div className='w-[400px] min-h-[600px] scrollbar-hide'>
+    <div className='flex flex-col w-[400px] min-h-[600px] scrollbar-hide'>
       <div className='flex w-full flex-row justify-between p-4 border-b-[1px]'>
         <BackButton />
         <HeaderTitle title='Word Game' />
-        <div className='flex items-center gap-3'>
+        <div className='flex flex-row gap-2 items-center'>
+          {/* Only show the reset icon when not in settings phase */}
+          {!showSettings && (
+            <TooltipProvider>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <RefreshCw 
+                    size={18} 
+                    className='text-muted-foreground cursor-pointer hover:text-foreground' 
+                    onClick={resetGame}
+                  />
+                </TooltipTrigger>
+                <TooltipContent>
+                  <p>Reset Game</p>
+                </TooltipContent>
+              </Tooltip>
+            </TooltipProvider>
+          )}
           <TooltipProvider>
             <Tooltip>
               <TooltipTrigger asChild>
-              <RefreshCw className='cursor-pointer' size={20} onClick={resetGame} />
+                <Info 
+                  size={18} 
+                  className='text-muted-foreground cursor-pointer hover:text-foreground' 
+                  onClick={toggleShowMaskedWords}
+                />
               </TooltipTrigger>
-              <TooltipContent>
-                <p>Reset Game</p>
-              </TooltipContent>
-            </Tooltip>
-          </TooltipProvider>
-          <TooltipProvider>
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <Info className='cursor-pointer' size={20} />
-              </TooltipTrigger>
-              <TooltipContent className='w-[300px] p-4 mr-4'>
-                <div className='flex flex-col gap-1'>
-                  <p className='font-bold'>Word Drop Game</p>
-                  <p className='text-sm'>Find hidden words in the grid by selecting connected letters. Words can be placed horizontally, vertically, diagonally, or in complex patterns.</p>
-                  <p className='text-sm mt-1'>• Use hints to reveal letters</p>
-                  <p className='text-sm'>• Points vary based on word difficulty</p>
-                  <p className='text-sm'>• Find all words to complete the game</p>
+              <TooltipContent className='w-[320px] p-4 mr-4'>
+                <div className='flex flex-col gap-2'>
+                  <h4 className='text-base font-bold'>How to Play:</h4>
+                  <ul className='text-sm space-y-1'>
+                    <li>- Find hidden words in the grid</li>
+                    <li>- Select to connect letters and form words</li>
+                    <li>- Words can be placed horizontally, vertically, or diagonally</li>
+                    <li>- Find all words before time runs out</li>
+                  </ul>
                 </div>
               </TooltipContent>
             </Tooltip>
@@ -772,320 +608,53 @@ const GameScreen = () => {
         </div>
       </div>
 
-      {/* Random Congratulation Message */}
-      {isGameComplete && (
-            <div className='p-4'>
-              <div className='p-6 bg-muted rounded-md text-center'>
-              <h2 className='text-2xl font-bold text-primary mb-2'>
-                {congratulation.title}
-              </h2>
-              <p className='text-base'>
-                {congratulation.message}
-              </p>
-            </div>
-            </div>
-          )
-        }
-
       {loading ? (
         <div className='flex mt-20 justify-center items-center'>
           <Spinner />
         </div>
-      ) : notEnoughWords ? (
-        <div className='flex flex-col mt-20 justify-center items-center p-4 gap-4'>
-          <div className='p-6 bg-muted rounded-md text-center max-w-md'>
-            <h2 className='text-2xl font-bold text-primary mb-2'>Not Enough Words</h2>
-            <p className='text-base mb-4'>
-              You need at least {wordCount} suitable words to play the Word Game. Please collect more words by browsing the web or adding words to your collection.
-            </p>
-            <p className='text-sm text-muted-foreground'>
-              Suitable words are 3-{maxWordLength} letters long and contain only alphabetic characters.
-            </p>
-          </div>
-          <Button onClick={resetGame} className='cursor-pointer'>
-            Try Again
-          </Button>
-        </div>
       ) : showSettings ? (
-        <div className='flex flex-col p-6 gap-6'>
-          <div className='text-center mb-2'>
-            <h2 className='text-2xl font-bold text-primary'>Game Settings</h2>
-            <p className='text-sm text-muted-foreground mt-1'>Customize your game experience</p>
-          </div>
-          
-          {/* Number of Words Setting */}
+        <div className='flex flex-col p-4 gap-8'>
           <div className='flex flex-col gap-2'>
-            <div className='flex items-center gap-2'>
-              <Hash size={18} />
-              <span className='font-medium'>Number of Words</span>
-            </div>
-            <div className='flex gap-2 mt-1'>
-              {[5, 7, 10].map(num => (
-                <Button 
-                  key={num}
-                  variant={wordCount === num ? 'default' : 'outline'}
-                  className={`flex-1 ${wordCount === num ? 'bg-primary' : ''}`}
-                  onClick={() => setWordCount(num)}
-                >
-                  {num}
-                </Button>
-              ))}
-            </div>
-          </div>
-          
-          {/* Max Word Length Setting */}
-          <div className='flex flex-col gap-2'>
-            <div className='flex items-center gap-2'>
-              <AlignJustify size={18} />
-              <span className='font-medium'>Max Word Length</span>
-            </div>
-            <div className='flex gap-2 mt-1'>
-              {[6, 8, 10].map(num => (
-                <Button 
-                  key={num}
-                  variant={maxWordLength === num ? 'default' : 'outline'}
-                  className={`flex-1 ${maxWordLength === num ? 'bg-primary' : ''}`}
-                  onClick={() => setMaxWordLength(num)}
-                >
-                  {num} chars
-                </Button>
-              ))}
-            </div>
-          </div>
-          
-          {/* Time Limit Setting */}
-          <div className='flex flex-col gap-2'>
-            <div className='flex items-center gap-2'>
-              <Timer size={18} />
-              <span className='font-medium'>Time Limit</span>
-            </div>
-            <div className='flex gap-2 mt-1'>
-              {[3, 5, 10].map(num => (
-                <Button 
-                  key={num}
-                  variant={timeLimit === num ? 'default' : 'outline'}
-                  className={`flex-1 ${timeLimit === num ? 'bg-primary' : ''}`}
-                  onClick={() => setTimeLimit(num)}
-                >
-                  {num} min
-                </Button>
-              ))}
-            </div>
-          </div>
-          
-          {/* Auto-Revealed Characters Setting */}
-          <div className='flex flex-col gap-2'>
-            <div className='flex items-center gap-2'>
-              <Eye size={18} />
-              <span className='font-medium'>Auto-Revealed Characters</span>
-            </div>
-            <div className='flex gap-2 mt-1'>
-              {[0, 1, 2].map(num => (
-                <Button 
-                  key={num}
-                  variant={autoRevealCount === num ? 'default' : 'outline'}
-                  className={`flex-1 ${autoRevealCount === num ? 'bg-primary' : ''}`}
-                  onClick={() => setAutoRevealCount(num)}
-                >
-                  {num}
-                </Button>
-              ))}
-            </div>
-          </div>
-          
-          <div className='flex flex-col gap-3 mt-4'>
-            <Button 
-              className='w-full py-6 text-lg font-medium cursor-pointer'
-              onClick={startGame}
-            >
-              Play
-            </Button>
-            <Button 
-              variant='outline' 
-              className='w-full cursor-pointer'
-              onClick={resetSettings}
-            >
-              Reset Settings
-            </Button>
+            <GameSettingsPhase
+              onStartGame={handleStartGame}
+              wordCount={wordCount}
+              setWordCount={setWordCount}
+              maxWordLength={maxWordLength}
+              setMaxWordLength={setMaxWordLength}
+              timeLimit={timeLimit}
+              setTimeLimit={setTimeLimit}
+              autoRevealCount={autoRevealCount}
+              setAutoRevealCount={setAutoRevealCount}
+            />
           </div>
         </div>
+      ) : notEnoughWords ? (
+        <NotEnoughWordsMessage 
+          wordCount={wordCount} 
+          maxWordLength={maxWordLength} 
+          resetGame={resetGame} 
+        />
       ) : (
-        <div className='flex flex-col gap-4 p-4'>
-          {/* Game Header */}
-          <div className='flex justify-between items-center'>
-            <div className='flex items-center gap-2'>
-              <Badge variant='outline' className='text-base px-3 py-1'>
-                Score: {score}
-              </Badge>
-              {timeRemaining !== null && (
-                <Badge variant={timeRemaining < 60 ? 'destructive' : 'outline'} className='text-base px-3 py-1'>
-                  Time: {Math.floor(timeRemaining / 60)}:{(timeRemaining % 60).toString().padStart(2, '0')}
-                </Badge>
-              )}
-              <TooltipProvider>
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <Switch
-                      checked={showMaskedWords}
-                      onCheckedChange={toggleShowMaskedWords}
-                      className="ml-2"
-                    />
-                  </TooltipTrigger>
-                  <TooltipContent>
-                    <p>Toggle Test Mode</p>
-                  </TooltipContent>
-                </Tooltip>
-              </TooltipProvider>
-            </div>
-          </div>
-
-          {/* Game Grid */}
-          <div className='flex justify-center'>
-            <div className='grid grid-cols-9 gap-1 w-full max-w-[450px]'>
-              {gameGrid.flat().map((cell, index) => (
-                <div
-                  key={index}
-                  className={`
-                    w-full aspect-square flex items-center justify-center 
-                    text-lg font-bold uppercase cursor-pointer rounded-md
-                    ${!cell.revealed ? 'bg-muted' : ''}
-                    ${selectedCells.includes(cell) ? 'bg-primary text-white' : ''}
-                    transition-all duration-200 hover:bg-primary/20
-                  `}
-                  onClick={() => handleCellClick(cell)}
-                  style={{
-                    // Apply unique color for each word's revealed cells, but only when not selected
-                    backgroundColor: cell.revealed && !selectedCells.includes(cell) ? 
-                      // Find which word this cell belongs to and use its color
-                      wordsToFind.find(w => w.found && w.letters.some(l => l.row === cell.row && l.col === cell.col))?.color || 
-                      '#3B82F6' : ''
-                  }}
-                >
-                  {cell.letter}
-                </div>
-              ))}
-            </div>
-          </div>
-
-          {/* Word Selection Controls - Hidden when game is complete */}
-          {!isGameComplete && (
-            <div className='flex justify-center gap-2 mt-2'>
-              <Button
-                variant='outline'
-                onClick={() => setSelectedCells([])}
-                disabled={selectedCells.length === 0}
-                className='cursor-pointer'
-              >
-                Clear
-              </Button>
-              <Button
-                onClick={checkSelectedWord}
-                disabled={selectedCells.length < 3}
-                className='cursor-pointer'
-              >
-                Submit
-              </Button>
-            </div>
-          )}
-
-          {/* Word List - Hidden when game is complete */}
-          <div className='mt-2'>
-              <h3 className='text-lg font-bold mb-2'>Words: {wordsToFind.filter(w => w.found).length}/{wordsToFind.length}</h3>
-              <div className='flex flex-col gap-2'>
-                {wordsToFind.map((word, index) => (
-                  <div
-                    key={index}
-                    className={`
-                      flex justify-between items-center py-2 px-4 rounded-md bg-muted
-                    `}
-                    style={{
-                      // backgroundColor: word.found ? 'transparent' : '',
-                      color: word.found ? 'var(--primary)' : ''
-                    }}
-                  >
-                    <div className='flex items-center gap-2'>
-                      {word.found || showMaskedWords ? (
-                        <span className='text-base'>{word.word}</span>
-                      ) : (
-                        <span className='text-base' style={{ letterSpacing: '0.25em' }}>
-                          {word.word.split('').map((char, i) => 
-                            word.revealedCharIndices.includes(i) ? char : '•'
-                          ).join('')}
-                        </span>
-                      )}
-                  
-                    </div>
-                    <div className='flex items-center gap-2'>
-                      <TooltipProvider>
-                        <Tooltip>
-                          <TooltipTrigger asChild>
-                            <Info size={16} className='cursor-pointer' />
-                          </TooltipTrigger>
-                          <TooltipContent className='w-64 p-2'>
-                            <div className='flex flex-col gap-2'>
-                              {word.definitions && word.definitions.length > 0 ? (
-                                word.definitions.map((def, i) => (
-                                  <div key={i} className='mb-1'>
-                                    <span className='italic'>({def.pos}) </span>
-                                    <span className='text-xs'>{def.definition}</span>
-                                  </div>
-                                ))
-                              ) : (
-                                <div className='mb-1'>
-                                  <span className='text-xs'>No definition available</span>
-                                </div>
-                              )}
-                            </div>
-                          </TooltipContent>
-                        </Tooltip>
-                      </TooltipProvider>
-                      
-                      {!word.found ? (
-                        // Show hint button for unfound words
-                        <TooltipProvider>
-                          <Tooltip>
-                            <TooltipTrigger asChild>
-                              <LifeBuoy size={16} className='cursor-pointer' onClick={() => showWordHint(index)} />
-                            </TooltipTrigger>
-                            <TooltipContent>
-                              <p>Hint</p>
-                            </TooltipContent>
-                          </Tooltip>
-                        </TooltipProvider>
-                      ) : (
-                        // Show audio button for found words
-                        <TooltipProvider>
-                          <Tooltip>
-                            <TooltipTrigger asChild>
-                              <Volume2 
-                                size={16} 
-                                className='cursor-pointer' 
-                                onClick={() => {
-                                  const originalWord = words.find(w => w.word.toLowerCase() === word.word.toLowerCase())
-                                  if (originalWord && originalWord.id) {
-                                    playAudio(originalWord.id)
-                                  }
-                                }} 
-                              />
-                            </TooltipTrigger>
-                            <TooltipContent>
-                              <p>Pronounce</p>
-                            </TooltipContent>
-                          </Tooltip>
-                        </TooltipProvider>
-                      )}
-                      <Badge variant='outline' className='text-xs'>
-                        {word.word.length} chars
-                      </Badge>
-                      <Badge variant='secondary' className='w-[55px]'>
-                    {word.found && word.pointsEarned ? `${word.pointsEarned} pts` : `${word.points} pts`}
-                  </Badge>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-        </div>
+        <GamePlayPhase
+          words={words}
+          gameGrid={gameGrid}
+          wordsToFind={wordsToFind}
+          score={score}
+          setScore={setScore}
+          selectedCells={selectedCells}
+          setSelectedCells={setSelectedCells}
+          setGameGrid={setGameGrid}
+          setWordsToFind={setWordsToFind}
+          timeRemaining={timeRemaining}
+          isGameComplete={isGameComplete}
+          showMaskedWords={showMaskedWords}
+          toggleShowMaskedWords={toggleShowMaskedWords}
+          playAudio={playAudio}
+          wordCount={wordCount}
+          maxWordLength={maxWordLength}
+          timeLimit={timeLimit}
+          autoRevealCount={autoRevealCount}
+        />
       )}
     </div>
   )
