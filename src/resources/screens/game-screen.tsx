@@ -12,9 +12,9 @@ import NotEnoughWordsMessage from '@/resources/components/not-enough-words-messa
 
 // Word difficulty scoring
 const WORD_DIFFICULTY_SCORES = {
-  beginner: 50,
-  intermediate: 100,
-  advanced: 150
+  beginner: 100,
+  intermediate: 200,
+  advanced: 300
 }
 
 // Predefined colors for words (7 distinct colors)
@@ -179,37 +179,65 @@ const GameScreen = () => {
 
   // Select a subset of words for the game
   const selectGameWords = (allWords: IWord[], count: number): IWord[] => {
+    // Get the maximum grid size based on word count
+    let maxGridSize = 8 // Default size (for 7 words)
+    if (count === 5) {
+      maxGridSize = 6
+    } else if (count === 7) {
+      maxGridSize = 8
+    } else if (count === 10) {
+      maxGridSize = 11
+    }
+    
     // Filter words that are suitable for the game based on settings
     const suitableWords = allWords.filter(word => {
       const wordText = word.word.toLowerCase()
-      return wordText.length >= 3 && wordText.length <= maxWordLength && /^[a-z]+$/.test(wordText)
+      // Words must be at least 3 characters and fit within the grid
+      // Also ensure they only contain letters a-z
+      // Handle 'No limit' option (maxWordLength = -1)
+      const lengthCheck = maxWordLength === -1 ? 
+        (wordText.length >= 3 && wordText.length <= maxGridSize) : 
+        (wordText.length >= 3 && wordText.length <= Math.min(maxWordLength, maxGridSize));
+      return lengthCheck && /^[a-z]+$/.test(wordText)
     })
     
-    // Shuffle the suitable words for randomness
-    const shuffledWords = shuffleArray(suitableWords)
+    // Sort words by length (descending) to prioritize longer words
+    const sortedWords = [...suitableWords].sort((a, b) => {
+      return b.word.length - a.word.length
+    })
+    
+    // Take the top words by length, then shuffle them for variety
+    // This ensures we get the longest possible words while maintaining some randomness
+    const topWords = sortedWords.slice(0, Math.min(count * 3, sortedWords.length))
+    const shuffledTopWords = shuffleArray(topWords)
     
     // If we don't have enough suitable words, log a warning and return what we have
-    if (shuffledWords.length < count) {
-      console.warn(`Not enough suitable words: found ${shuffledWords.length}, needed ${count}`)
-      return shuffledWords
+    if (shuffledTopWords.length < count) {
+      console.warn(`Not enough suitable words: found ${shuffledTopWords.length}, needed ${count}`)
+      return shuffledTopWords
     }
     
     // If we have enough words, take exactly the requested count
-    return shuffledWords.slice(0, count)
+    return shuffledTopWords.slice(0, count)
   }
 
   // Create the game grid and place words
   const createGameGrid = (gameWords: IWord[]) => {
-    // Set grid size based on max word length
-    let gridSize = 9 // Default size
+    // Set grid size based on word count and maxWordLength
+    let gridSize = 8 // Default size (for 7 words)
     
-    // Adjust grid size based on max word length
-    if (maxWordLength === 6) {
-      gridSize = 7 // 7x7 grid for max word length of 6
-    } else if (maxWordLength === 8) {
-      gridSize = 9 // 9x9 grid for max word length of 8
-    } else if (maxWordLength === 10) {
-      gridSize = 11 // 11x11 grid for max word length of 10
+    // If maxWordLength is -1 (No limit), always use 11x11 grid
+    if (maxWordLength === -1) {
+      gridSize = 11 // 11x11 grid for 'No limit' option
+    } else {
+      // Adjust grid size based on word count
+      if (wordCount === 5) {
+        gridSize = 6 // 6x6 grid for 5 words
+      } else if (wordCount === 7) {
+        gridSize = 8 // 8x8 grid for 7 words
+      } else if (wordCount === 10) {
+        gridSize = 11 // 11x11 grid for 10 words
+      }
     }
     const grid: GridCell[][] = Array(gridSize).fill(null).map((_, row) => 
       Array(gridSize).fill(null).map((_, col) => ({
@@ -222,8 +250,8 @@ const GameScreen = () => {
       }))
     )
     
-    // Ensure we're working with exactly 7 words
-    const wordsToPlace = gameWords.slice(0, 7)
+    // Ensure we're working with exactly the requested number of words
+    const wordsToPlace = gameWords.slice(0, wordCount)
     const placedWords: WordToFind[] = []
     
     // Try to place each word on the grid

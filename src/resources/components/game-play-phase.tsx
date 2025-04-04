@@ -65,7 +65,6 @@ const GamePlayPhase = ({
   timeRemaining,
   isGameComplete,
   showMaskedWords,
-  toggleShowMaskedWords,
   playAudio,
   // Game settings
   wordCount,
@@ -118,28 +117,34 @@ const GamePlayPhase = ({
       // Update score
       const targetWord = updatedWordsToFind[wordIndex]
       const wordPoints = targetWord.points
-      const wordLength = targetWord.word.length
       
-      // Calculate points reduction based on revealed characters
-      // Reserve points based on auto-revealed count
-      let reservedPoints = 20 // Default
+      // Step 1: Set initial points based on auto-revealed count
+      let initialPoints = 0
       
-      // Adjust reserved points based on auto-revealed count
-      if (targetWord.revealedCharIndices.length === 0) {
-        reservedPoints = 30 // 0 auto-revealed
-      } else if (targetWord.revealedCharIndices.length === 1) {
-        reservedPoints = 20 // 1 auto-revealed
-      } else if (targetWord.revealedCharIndices.length >= 2) {
-        reservedPoints = 10 // 2 or more auto-revealed
+      // Use fixed percentages for different auto-reveal counts
+      if (autoRevealCount === 0) {
+        initialPoints = wordPoints // 100% of points for 0 auto-revealed
+      } else if (autoRevealCount === 1) {
+        initialPoints = Math.round(wordPoints * 0.85) // 85% for 1 auto-revealed
+      } else if (autoRevealCount === 2) {
+        initialPoints = Math.round(wordPoints * 0.70) // 70% for 2 auto-revealed
+      } else {
+        initialPoints = Math.round(wordPoints * 0.55) // 55% for 3+ auto-revealed
       }
-      const pointsPerChar = (wordPoints - reservedPoints) / wordLength
       
-      // Count revealed characters (excluding the 2 auto-revealed ones)
-      const revealedCount = Math.max(0, targetWord.revealedCharIndices.length - 2)
+      // Step 2: Calculate fixed points reduction per additional hint
+      // Each additional hint reduces by 10 points or 10% of initial points, whichever is greater
+      const pointsPerHint = Math.max(10, Math.round(initialPoints * 0.1))
       
-      // Calculate actual points earned
-      const pointsReduction = Math.round(pointsPerChar * revealedCount)
-      const actualPoints = Math.max(reservedPoints, wordPoints - pointsReduction)
+      // Count additional hints beyond auto-revealed
+      const additionalHints = Math.max(0, targetWord.revealedCharIndices.length - autoRevealCount)
+      
+      // Calculate total reduction from additional hints
+      const hintReduction = pointsPerHint * additionalHints
+      
+      // Calculate actual points (with minimum guarantee of 25% of base points)
+      const minimumPoints = Math.round(wordPoints * 0.25) // 25% minimum
+      const actualPoints = Math.max(minimumPoints, initialPoints - hintReduction)
       
       // Store the points earned for this word
       updatedWordsToFind[wordIndex].pointsEarned = actualPoints
@@ -195,30 +200,39 @@ const GamePlayPhase = ({
     updatedWordsToFind[wordIndex].revealedCharIndices.push(randomIndex)
     updatedWordsToFind[wordIndex].hintRevealed = true
     
-    // Calculate points per character based on auto-revealed count
+    // Step 1: Set initial points based on auto-revealed count (same as checkSelectedWord)
     const wordPoints = targetWord.points
+    let initialPoints = 0
     
-    // Adjust reserved points based on auto-revealed count
-    let reservedPoints = 20 // Default
-    
-    // Set reserved points based on auto-revealed count
-    if (targetWord.revealedCharIndices.length === 0) {
-      reservedPoints = 30 // 0 auto-revealed
-    } else if (targetWord.revealedCharIndices.length === 1) {
-      reservedPoints = 20 // 1 auto-revealed
-    } else if (targetWord.revealedCharIndices.length >= 2) {
-      reservedPoints = 10 // 2 or more auto-revealed
+    // Use fixed percentages for different auto-reveal counts
+    if (autoRevealCount === 0) {
+      initialPoints = wordPoints // 100% of points for 0 auto-revealed
+    } else if (autoRevealCount === 1) {
+      initialPoints = Math.round(wordPoints * 0.85) // 85% for 1 auto-revealed
+    } else if (autoRevealCount === 2) {
+      initialPoints = Math.round(wordPoints * 0.70) // 70% for 2 auto-revealed
+    } else {
+      initialPoints = Math.round(wordPoints * 0.55) // 55% for 3+ auto-revealed
     }
-    const pointsPerChar = (wordPoints - reservedPoints) / wordLength
     
-    // Calculate penalty for this hint (only count hints beyond the 2 auto-revealed characters)
-    const hintCount = targetWord.revealedCharIndices.length - 2
-    if (hintCount > 0) {
-      // Reduce the word's points for when it's found
-      const pointsReduction = Math.round(pointsPerChar * hintCount)
-      const newPoints = Math.max(reservedPoints, wordPoints - pointsReduction)
-      updatedWordsToFind[wordIndex].pointsEarned = newPoints
-    }
+    // Step 2: Calculate fixed points reduction per additional hint
+    // Each additional hint reduces by 10 points or 10% of initial points, whichever is greater
+    const pointsPerHint = Math.max(10, Math.round(initialPoints * 0.1))
+    
+    // Count additional hints beyond auto-revealed
+    const additionalHints = Math.max(0, targetWord.revealedCharIndices.length - autoRevealCount)
+    
+    // Calculate total reduction from additional hints
+    const hintReduction = pointsPerHint * additionalHints
+    
+    // Calculate actual points (with minimum guarantee of 25% of base points)
+    const minimumPoints = Math.round(wordPoints * 0.25) // 25% minimum
+    let newPoints = Math.max(minimumPoints, initialPoints - hintReduction)
+    
+    // No additional calculation needed - the percentage-based approach already handles this
+    
+    // Always set pointsEarned to ensure the animation has a value to work with
+    updatedWordsToFind[wordIndex].pointsEarned = newPoints
     
     setWordsToFind(updatedWordsToFind)
   }
@@ -228,8 +242,6 @@ const GamePlayPhase = ({
       <GameHeader 
         score={score} 
         timeRemaining={timeRemaining} 
-        showMaskedWords={showMaskedWords} 
-        toggleShowMaskedWords={toggleShowMaskedWords}
         wordCount={wordCount}
         maxWordLength={maxWordLength}
         timeLimit={timeLimit}
@@ -275,6 +287,7 @@ const GamePlayPhase = ({
         showWordHint={showWordHint} 
         words={words}
         playAudio={playAudio}
+        autoRevealCount={autoRevealCount}
       />
     </div>
   )

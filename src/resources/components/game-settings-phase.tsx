@@ -119,7 +119,19 @@ const GameSettingsPhase = ({
         >
           <Select
             value={wordCount.toString()}
-            onValueChange={(value) => setWordCount(parseInt(value))}
+            onValueChange={(value) => {
+              const count = parseInt(value);
+              setWordCount(count);
+              
+              // Automatically set the appropriate maxWordLength based on word count
+              if (count === 5) {
+                setMaxWordLength(6); // 6x6 grid for 5 words
+              } else if (count === 7) {
+                setMaxWordLength(8); // 8x8 grid for 7 words
+              } else if (count === 10) {
+                setMaxWordLength(11); // 11x11 grid for 10 words
+              }
+            }}
           >
             <SelectTrigger className="w-[140px]">
               <SelectValue placeholder="Select count" />
@@ -136,7 +148,7 @@ const GameSettingsPhase = ({
         </SettingOption>
 
         <SettingOption 
-          icon={AlignJustify} 
+          icon={AlignJustify}   
           title="Max Word Length"
         >
           <Select
@@ -149,7 +161,7 @@ const GameSettingsPhase = ({
             <SelectContent>
               <SelectGroup>
                 <SelectLabel>Maximum word length</SelectLabel>
-                <SelectItem value="7">7 characters</SelectItem>
+                <SelectItem value="6">6 characters</SelectItem>
                 <SelectItem value="8">8 characters</SelectItem>
                 <SelectItem value="-1">No limit</SelectItem>
               </SelectGroup>
