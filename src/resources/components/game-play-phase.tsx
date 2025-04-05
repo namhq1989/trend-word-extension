@@ -278,12 +278,13 @@ const GamePlayPhase = ({
       {/* Game Completion Message */}
       {isGameComplete && <GameCompletionMessage />}
 
-      {/* Game Grid */}
-      <GameGrid 
-        gameGrid={gameGrid} 
-        selectedCells={selectedCells} 
-        wordsToFind={wordsToFind} 
-        handleCellClick={handleCellClick} 
+      {/* Game grid */}
+      <GameGrid
+        gameGrid={gameGrid}
+        selectedCells={selectedCells}
+        wordsToFind={wordsToFind}
+        handleCellClick={handleCellClick}
+        showMaskedWords={showMaskedWords}
       />
 
       {/* Word Selection Controls - Hidden when game is complete */}
