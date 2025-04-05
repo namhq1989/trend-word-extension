@@ -1,4 +1,4 @@
-import React from 'react'
+import React, { useState, useEffect } from 'react'
 import { Button } from '@/components/ui/button.tsx'
 import { IWord } from '@/app/models/word.ts'
 import GameGrid from '@/resources/components/game-grid.tsx'
@@ -52,6 +52,8 @@ interface GamePlayPhaseProps {
   autoRevealCount: number
 }
 
+
+
 const GamePlayPhase = ({
   words,
   gameGrid,
@@ -72,6 +74,9 @@ const GamePlayPhase = ({
   timeLimit,
   autoRevealCount
 }: GamePlayPhaseProps) => {
+  // State for score animation
+  const [animatingScore, setAnimatingScore] = useState<number | null>(null)
+  const [targetScore, setTargetScore] = useState<number>(score)
   
   // Handle cell click/selection
   const handleCellClick = (cell: GridCell) => {
@@ -116,41 +121,19 @@ const GamePlayPhase = ({
       
       // Update score
       const targetWord = updatedWordsToFind[wordIndex]
-      const wordPoints = targetWord.points
       
-      // Step 1: Set initial points based on auto-revealed count
-      let initialPoints = 0
+      // Get the current points for this word - either from pointsEarned or original points
+      // This ensures we use the points that may have been modified by hints in word-list component
+      let actualPoints = targetWord.pointsEarned || targetWord.points
       
-      // Use fixed percentages for different auto-reveal counts
-      if (autoRevealCount === 0) {
-        initialPoints = wordPoints // 100% of points for 0 auto-revealed
-      } else if (autoRevealCount === 1) {
-        initialPoints = Math.round(wordPoints * 0.85) // 85% for 1 auto-revealed
-      } else if (autoRevealCount === 2) {
-        initialPoints = Math.round(wordPoints * 0.70) // 70% for 2 auto-revealed
-      } else {
-        initialPoints = Math.round(wordPoints * 0.55) // 55% for 3+ auto-revealed
+      // Store the points earned for this word if not already set
+      if (!updatedWordsToFind[wordIndex].pointsEarned) {
+        updatedWordsToFind[wordIndex].pointsEarned = actualPoints
       }
       
-      // Step 2: Calculate fixed points reduction per additional hint
-      // Each additional hint reduces by 10 points or 10% of initial points, whichever is greater
-      const pointsPerHint = Math.max(10, Math.round(initialPoints * 0.1))
-      
-      // Count additional hints beyond auto-revealed
-      const additionalHints = Math.max(0, targetWord.revealedCharIndices.length - autoRevealCount)
-      
-      // Calculate total reduction from additional hints
-      const hintReduction = pointsPerHint * additionalHints
-      
-      // Calculate actual points (with minimum guarantee of 25% of base points)
-      const minimumPoints = Math.round(wordPoints * 0.25) // 25% minimum
-      const actualPoints = Math.max(minimumPoints, initialPoints - hintReduction)
-      
-      // Store the points earned for this word
-      updatedWordsToFind[wordIndex].pointsEarned = actualPoints
-      
-      // Add the points to the score
-      setScore((prev: number) => prev + actualPoints)
+      // Set up score animation
+      setTargetScore(score + actualPoints)
+      setAnimatingScore(score)
       
       // Update the word's letters to use the selected cells instead of the predefined ones
       // This ensures the correct cells are highlighted when a word is found
@@ -175,6 +158,16 @@ const GamePlayPhase = ({
     
     // Clear selection
     setSelectedCells([])
+  }
+
+  // Update points for a specific word
+  const updateWordPoints = (wordIndex: number, points: number) => {
+    if (wordIndex < 0 || wordIndex >= wordsToFind.length) return
+    if (wordsToFind[wordIndex].found) return
+    
+    const updatedWordsToFind = [...wordsToFind]
+    updatedWordsToFind[wordIndex].pointsEarned = points
+    setWordsToFind(updatedWordsToFind)
   }
 
   // Show a hint for a specific word by revealing one random character
@@ -236,11 +229,45 @@ const GamePlayPhase = ({
     
     setWordsToFind(updatedWordsToFind)
   }
+  // Effect to handle score animation - flat 0.5 seconds duration
+  useEffect(() => {
+    if (animatingScore === null || animatingScore === targetScore) return
+    
+    // Calculate total animation frames for 0.5 seconds (500ms)
+    // Using requestAnimationFrame which typically runs at 60fps
+    // So we need ~30 frames for 0.5 seconds
+    const totalFrames = 30
+    const scoreDifference = targetScore - animatingScore
+    
+    // Calculate step size based on score difference and total frames
+    // Use at least 1 as step size to ensure movement
+    const step = Math.max(1, Math.abs(Math.round(scoreDifference / totalFrames)))
+    
+    // Determine direction
+    const direction = animatingScore < targetScore ? 1 : -1
+    
+    const timer = setTimeout(() => {
+      // Calculate new score with appropriate step and direction
+      const newAnimatingScore = animatingScore + (step * direction)
+      
+      // Check if we've reached or passed the target
+      if ((direction > 0 && newAnimatingScore >= targetScore) || 
+          (direction < 0 && newAnimatingScore <= targetScore)) {
+        setAnimatingScore(null)
+        setScore(targetScore)
+      } else {
+        setAnimatingScore(newAnimatingScore)
+      }
+    }, 500 / totalFrames) // Distribute frames evenly across 500ms
+    
+    return () => clearTimeout(timer)
+  }, [animatingScore, targetScore, setScore])
+  
   return (
     <div className='flex flex-col gap-4 p-4'>
       {/* Game Header */}
       <GameHeader 
-        score={score} 
+        score={animatingScore !== null ? animatingScore : score} 
         timeRemaining={timeRemaining} 
         wordCount={wordCount}
         maxWordLength={maxWordLength}
@@ -288,6 +315,7 @@ const GamePlayPhase = ({
         words={words}
         playAudio={playAudio}
         autoRevealCount={autoRevealCount}
+        updateWordPoints={updateWordPoints}
       />
     </div>
   )

@@ -17,15 +17,18 @@ const WORD_DIFFICULTY_SCORES = {
   advanced: 300
 }
 
-// Predefined colors for words (7 distinct colors)
+// Predefined colors for words (10 distinct colors)
 const WORD_COLORS = [
-  '#7f1d1d',  // Dark red
-  '#365314',  // Dark green
-  '#134e4a',  // Dark teal
-  '#1e3a8a',  // Dark blue
-  '#581c87',  // Dark purple
-  '#713f12',  // Dark yellow
-  '#881337',  // Dark rose
+  '#dc2626',  // Bright red
+  '#16a34a',  // Bright green
+  '#0891b2',  // Cyan
+  '#2563eb',  // Royal blue
+  '#9333ea',  // Purple
+  '#ca8a04',  // Yellow
+  '#e11d48',  // Rose
+  '#f97316',  // Orange
+  '#0d9488',  // Teal
+  '#6d28d9',  // Violet
 ]
 
 const GameScreen = () => {
@@ -359,7 +362,7 @@ const GameScreen = () => {
                 word: wordText,
                 found: false,
                 level: wordObj.level.toLowerCase(),
-                points: WORD_DIFFICULTY_SCORES[wordObj.level.toLowerCase() as keyof typeof WORD_DIFFICULTY_SCORES] || 5,
+                points: WORD_DIFFICULTY_SCORES[wordObj.level.toLowerCase() as keyof typeof WORD_DIFFICULTY_SCORES] || 100,
                 letters: wordCells,
                 color: wordColor,
                 hintRevealed: false,

@@ -12,48 +12,44 @@ interface WordListProps {
   words: IWord[]
   playAudio: (id: string) => void
   autoRevealCount: number
+  updateWordPoints?: (index: number, points: number) => void
 }
 
-const WordList = ({ wordsToFind, showMaskedWords, showWordHint, words, playAudio, autoRevealCount }: WordListProps) => {
+const WordList = ({ wordsToFind, showMaskedWords, showWordHint, words, playAudio, autoRevealCount, updateWordPoints }: WordListProps) => {
   // State to track animating points for each word
   const [animatingPoints, setAnimatingPoints] = useState<{[key: string]: number}>({})
   const [isAnimating, setIsAnimating] = useState<{[key: string]: boolean}>({})
+  // Store the initial calculated points (A) for each word
+  const [initialCalculatedPoints, setInitialCalculatedPoints] = useState<{[key: string]: number}>({})
   // Use a Record type for the ref to store both words array and individual word references
   const previousWordsRef = useRef<Record<string, any>>({
     words: [],
     wordRefs: {}
   })
   
-  // Calculate reduced points based on the word's revealed characters
+  // Calculate points based on the new formula
   const calculateReducedPoints = (word: WordToFind) => {
-    const wordPoints = word.points
+    // Get the initial points for the word
+    const initialPoints = word.points
     const wordLength = word.word.length
     
-    // Adjust reserved points based on auto-revealed count
-    let reservedPoints = 20 // Default
-    
-    // Set reserved points based on auto-revealed count
-    if (word.revealedCharIndices.length === 0) {
-      reservedPoints = 30 // 0 auto-revealed
-    } else if (word.revealedCharIndices.length === 1) {
-      reservedPoints = 20 // 1 auto-revealed
-    } else if (word.revealedCharIndices.length >= 2) {
-      reservedPoints = 10 // 2 or more auto-revealed
+    // Apply point reduction based on autoRevealCount
+    let adjustedPoints = initialPoints
+    if (autoRevealCount === 1) {
+      // Reduce by 10% for autoRevealCount of 1
+      adjustedPoints = initialPoints - (0.1 * initialPoints)
+    } else if (autoRevealCount > 1) {
+      // Reduce by 20% for autoRevealCount of 2 or more
+      adjustedPoints = initialPoints - (0.2 * initialPoints)
     }
     
-    const pointsPerChar = (wordPoints - reservedPoints) / wordLength
+    // Add bonus points based on word length (20 points per character)
+    const lengthBonus = wordLength * 20
     
-    // Use the autoRevealCount from props to determine when to start reducing points
+    // Calculate final points
+    const finalPoints = Math.round(adjustedPoints + lengthBonus)
     
-    // Calculate penalty for hints - start counting from the first manual hint
-    // If autoRevealCount is 1, then we should start reducing points from the 2nd character (index 1)
-    const hintCount = Math.max(0, word.revealedCharIndices.length - autoRevealCount)
-    if (hintCount > 0) {
-      const pointsReduction = Math.round(pointsPerChar * hintCount)
-      return Math.max(reservedPoints, wordPoints - pointsReduction)
-    }
-    
-    return wordPoints
+    return finalPoints
   }
   
   // Function to handle hint click with animation
@@ -61,55 +57,56 @@ const WordList = ({ wordsToFind, showMaskedWords, showWordHint, words, playAudio
     const word = wordsToFind[index]
     if (word.found) return
     
-    // Store current points before hint
-    const currentPoints = word.pointsEarned || word.points
+    // Get or calculate the initial points (A) for this word
+    let wordInitialPoints = initialCalculatedPoints[index]
     
-    // Calculate what the new points will be after the hint
-    // This is to ensure our animation has a target to animate to
-    const wordPoints = word.points
-    const wordLength = word.word.length
-    let reservedPoints = 20
-    
-    // Use the autoRevealCount from props to determine when to start reducing points
-    
-    // Set reserved points based on auto-revealed count
-    const revealedCount = word.revealedCharIndices.length + 1 // +1 for the hint we're about to show
-    if (revealedCount === 0) {
-      reservedPoints = 30
-    } else if (revealedCount === 1) {
-      reservedPoints = 20
-    } else if (revealedCount >= 2) {
-      reservedPoints = 10
+    if (wordInitialPoints === undefined) {
+      // First time calculating points for this word
+      wordInitialPoints = calculateReducedPoints(word)
+      
+      // Store for future use
+      setInitialCalculatedPoints(prev => ({
+        ...prev,
+        [index]: wordInitialPoints
+      }))
     }
     
-    const pointsPerChar = (wordPoints - reservedPoints) / wordLength
+    // Calculate how many characters have been manually revealed so far (not including auto-revealed)
+    const manuallyRevealedCount = Math.max(0, word.revealedCharIndices.length - autoRevealCount)
     
-    // Calculate penalty for this hint - start counting from the first manual hint
-    // If autoRevealCount is 1, then we should start reducing points from the 2nd character (index 1)
-    const hintCount = Math.max(0, revealedCount - autoRevealCount)
-    let calculatedPoints = wordPoints
+    // Calculate points after applying sequential 8% reductions for each hint
+    // Start with the initial calculated points
+    let reducedPoints = wordInitialPoints
     
-    // Always calculate a reduction if we're revealing a character manually
-    if (hintCount > 0) {
-      const pointsReduction = Math.round(pointsPerChar * hintCount)
-      calculatedPoints = Math.max(reservedPoints, wordPoints - pointsReduction)
+    // Apply 8% reduction for each hint (including the new one we're about to reveal)
+    for (let i = 0; i < manuallyRevealedCount + 1; i++) {
+      const reduction = Math.round(wordInitialPoints * 0.08)
+      reducedPoints -= reduction
     }
     
-    // Store the calculated points in the animatingPoints state to use as target
-    // We'll set this as the target for the animation to end at
-    const finalPoints = calculatedPoints
+    // Ensure points don't go below 20% of initial calculated points
+    const minimumPoints = Math.round(wordInitialPoints * 0.2)
     
-    // Set up animation starting and ending points
+    if (reducedPoints < minimumPoints) {
+      reducedPoints = minimumPoints
+    }
+    
+    // For animation, we need to start from the previous points or the initial points
+    // Get the previous points from our stored ref or from the current state
+    const prevWordRef = previousWordsRef.current.wordRefs[`word-${index}`]
+    const previousPoints = prevWordRef?.pointsEarned || word.pointsEarned || wordInitialPoints
+    
+    // Set up animation starting and ending points - start from the previous calculated points
     setAnimatingPoints(prev => ({
       ...prev,
-      [index]: currentPoints
+      [index]: previousPoints
     }))
     
     // Store the target points in a ref to use during animation
     const wordRef = `word-${index}`
     previousWordsRef.current.wordRefs[wordRef] = {
       ...word,
-      pointsEarned: finalPoints
+      pointsEarned: reducedPoints
     }
     
     // Set animation flag
@@ -118,8 +115,42 @@ const WordList = ({ wordsToFind, showMaskedWords, showWordHint, words, playAudio
       [index]: true
     }))
     
+    // Store our calculated points in a variable to check after showWordHint
+    const ourCalculatedPoints = reducedPoints
+    
+    // Update the parent component with our calculated points
+    if (updateWordPoints) {
+      updateWordPoints(index, reducedPoints)
+    }
+    
     // Call the actual hint function
     showWordHint(index)
+    
+    // Check if the points were changed by showWordHint and restore our calculation if needed
+    setTimeout(() => {
+      // If the points were changed to something different than what we calculated
+      if (wordsToFind[index].pointsEarned && wordsToFind[index].pointsEarned !== ourCalculatedPoints) {
+        // Create a modified copy of the word with our calculated points
+        const modifiedWord = {
+          ...wordsToFind[index],
+          pointsEarned: ourCalculatedPoints
+        }
+        
+        // Update the stored ref
+        previousWordsRef.current.wordRefs[`word-${index}`] = modifiedWord
+        
+        // Also force the animation to target our calculated points
+        setAnimatingPoints(prev => ({
+          ...prev,
+          [index]: prev[index] // Keep the current animation position
+        }))
+        
+        // Update the parent component again to ensure our calculation is used
+        if (updateWordPoints) {
+          updateWordPoints(index, ourCalculatedPoints)
+        }
+      }
+    }, 50)
   }
   
   // Effect to detect changes in points and animate them
@@ -164,13 +195,17 @@ const WordList = ({ wordsToFind, showMaskedWords, showWordHint, words, playAudio
       const word = wordsToFind[index]
       if (!word) return
       
-      // Get the target points from either the word's earned points, our stored ref, or calculate it
+      // Get the target points - IMPORTANT: prioritize our stored ref points
       const wordRef = `word-${index}`
       const storedWord = previousWordsRef.current.wordRefs[wordRef]
-      const targetPoints = word.pointsEarned || 
-                          (storedWord && storedWord.pointsEarned) || 
+      
+      // Prioritize our stored reference which has our calculated points
+      const targetPoints = (storedWord && storedWord.pointsEarned) || 
+                          word.pointsEarned || 
+                          initialCalculatedPoints[index] ||
                           calculateReducedPoints(word)
-      const currentAnimatingPoints = animatingPoints[index] || word.points
+      
+      const currentAnimatingPoints = animatingPoints[index] || initialCalculatedPoints[index] || word.points
       
       // If we've reached the target, stop animating
       if (currentAnimatingPoints === targetPoints) {
@@ -178,6 +213,12 @@ const WordList = ({ wordsToFind, showMaskedWords, showWordHint, words, playAudio
           ...prev,
           [index]: false
         }))
+        
+        // Ensure the parent component has the final points
+        if (updateWordPoints) {
+          updateWordPoints(index, targetPoints)
+        }
+        
         return
       }
       
@@ -209,9 +250,9 @@ const WordList = ({ wordsToFind, showMaskedWords, showWordHint, words, playAudio
           >
             <div className='flex items-center gap-2'>
               {word.found || showMaskedWords ? (
-                <span className='text-base'>{word.word}</span>
+                <span className='text-sm'>{word.word}</span>
               ) : (
-                <span className='text-base' style={{ letterSpacing: '0.25em' }}>
+                <span className='text-sm' style={{ letterSpacing: '0.25em' }}>
                   {word.word.split('').map((char, i) => 
                     word.revealedCharIndices.includes(i) ? char : '•'
                   ).join('')}
@@ -277,18 +318,31 @@ const WordList = ({ wordsToFind, showMaskedWords, showWordHint, words, playAudio
                   </Tooltip>
                 </TooltipProvider>
               )}
-              <Badge variant='outline' className='text-xs'>
+              <Badge variant='outline' className='w-[60px] text-xs'>
                 {word.word.length} chars
               </Badge>
               <Badge 
                 variant='secondary' 
                 className='w-[55px] transition-all'
               >
-                {isAnimating[index] && animatingPoints[index] !== undefined
-                  ? `${animatingPoints[index]} pts`
-                  : word.pointsEarned 
-                    ? `${word.pointsEarned} pts` 
-                    : `${word.points} pts`
+                {(() => {
+                  // Get the stored word ref which has our calculated points
+                  const wordRef = `word-${index}`
+                  const storedWord = previousWordsRef.current.wordRefs[wordRef]
+                  
+                  // Prioritize our stored ref points over word.pointsEarned
+                  const displayValue = isAnimating[index] && animatingPoints[index] !== undefined
+                    ? animatingPoints[index]
+                    : (storedWord && storedWord.pointsEarned) 
+                      ? storedWord.pointsEarned
+                      : word.pointsEarned 
+                        ? word.pointsEarned 
+                        : initialCalculatedPoints[index] !== undefined
+                          ? initialCalculatedPoints[index]
+                          : calculateReducedPoints(word);
+                  
+                  return `${displayValue} pts`;
+                })()
                 }
               </Badge>
             </div>

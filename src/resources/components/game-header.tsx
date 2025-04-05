@@ -1,3 +1,4 @@
+import { formatReadableNumber } from '@/lib/number'
 import GameSettingsDisplay from '@/resources/components/game-settings-display.tsx'
 
 interface GameHeaderProps {
@@ -9,13 +10,13 @@ interface GameHeaderProps {
   autoRevealCount?: number
 }
 
-const GameHeader = ({ 
-  score, 
-  timeRemaining, 
+const GameHeader = ({
+  score,
+  timeRemaining,
   wordCount = 7,
   maxWordLength = 8,
   timeLimit = 5,
-  autoRevealCount = 2
+  autoRevealCount = 2,
 }: GameHeaderProps) => {
   return (
     <div className='flex justify-between items-center'>
@@ -26,14 +27,21 @@ const GameHeader = ({
           timeLimit={timeLimit}
           autoRevealCount={autoRevealCount}
         />
-        <p className='text-base'>
-          Score: {score}
+        <p className='text-base text-center w-[100px]'>
+          Score:{' '}
+          <span className='font-bold'>{formatReadableNumber(score)}</span>
         </p>
         {timeRemaining !== null && (
-          <p 
-            className={`text-base ${timeRemaining < 60 ? 'text-[#dc2626]' : ''}`}
+          <p
+            className={`text-base text-center w-[100px] ${timeRemaining < 60 ? 'text-[#dc2626]' : ''}`}
           >
-            Time: {Math.floor(timeRemaining / 60).toString().padStart(2, '0')}:{(timeRemaining % 60).toString().padStart(2, '0')}
+            Time:{' '}
+            <span className='font-bold'>
+              {Math.floor(timeRemaining / 60)
+                .toString()
+                .padStart(2, '0')}
+              :{(timeRemaining % 60).toString().padStart(2, '0')}
+            </span>
           </p>
         )}
       </div>
