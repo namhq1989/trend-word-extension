@@ -1,4 +1,4 @@
-import { Library, Settings } from 'lucide-react'
+import { Gamepad2, Library, Settings } from 'lucide-react'
 import HeaderTitle from '@/resources/components/header-title.tsx'
 import { Separator } from '@/components/ui/separator.tsx'
 import MenuItem from '@/resources/components/menu-item.tsx'
@@ -17,6 +17,7 @@ import {
   TooltipTrigger,
 } from '@/components/ui/tooltip'
 import { IWord } from '@/app/models/word.ts'
+import GameScreen from './game-screen'
 
 // Component to display the countdown to next word notification
 const NextWordCountdown = () => {
@@ -171,6 +172,11 @@ const HomeScreen = () => {
             title='Words'
             icon={Library}
             onClick={() => goTo(WordListScreen)}
+          />
+          <MenuItem
+            title='Game'
+            icon={Gamepad2}
+            onClick={() => goTo(GameScreen)}
           />
           <MenuItem
             title='Settings'
