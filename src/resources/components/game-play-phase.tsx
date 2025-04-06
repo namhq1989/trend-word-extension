@@ -90,6 +90,15 @@ const GamePlayPhase = ({
   // State to track if the current selection is incorrect (for red color)
   const [isIncorrectSelection, setIsIncorrectSelection] = useState(false)
 
+  // Check if two cells are adjacent (horizontally, vertically, or diagonally)
+  const areCellsAdjacent = (cell1: GridCell, cell2: GridCell): boolean => {
+    const rowDiff = Math.abs(cell1.row - cell2.row)
+    const colDiff = Math.abs(cell1.col - cell2.col)
+
+    // Cells are adjacent if they are at most 1 cell away in any direction
+    return rowDiff <= 1 && colDiff <= 1 && !(rowDiff === 0 && colDiff === 0)
+  }
+
   // Handle cell click/selection
   const handleCellClick = (cell: GridCell) => {
     // Don't allow selection if game is complete
@@ -110,6 +119,17 @@ const GamePlayPhase = ({
         setSelectedCells((prev: GridCell[]) => prev.slice(0, cellIndex + 1))
       }
     } else {
+      // Check if the new cell is adjacent to the last selected cell
+      if (selectedCells.length > 0) {
+        const lastSelectedCell = selectedCells[selectedCells.length - 1]
+
+        // If not adjacent, reset selection and start a new path
+        if (!areCellsAdjacent(lastSelectedCell, cell)) {
+          setSelectedCells([cell])
+          return
+        }
+      }
+
       // Add cell to selection
       setSelectedCells((prev: GridCell[]) => [...prev, cell])
     }
