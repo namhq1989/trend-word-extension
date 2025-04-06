@@ -44,8 +44,7 @@ const GameCompletionMessage = ({ title, message }: GameCompletionMessageProps) =
   }, [title, message])
 
   return (
-    <div className='p-4'>
-      <div className='p-6 bg-muted rounded-md text-center'>
+      <div className='p-4 bg-muted rounded-md text-center'>
         <h2 className='text-2xl font-bold text-primary mb-2'>
           {congratulation.title}
         </h2>
@@ -53,7 +52,6 @@ const GameCompletionMessage = ({ title, message }: GameCompletionMessageProps) =
           {congratulation.message}
         </p>
       </div>
-    </div>
   )
 }
 
