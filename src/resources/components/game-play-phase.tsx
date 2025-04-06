@@ -52,8 +52,6 @@ interface GamePlayPhaseProps {
   autoRevealCount: number
 }
 
-
-
 const GamePlayPhase = ({
   words,
   gameGrid,
@@ -72,22 +70,36 @@ const GamePlayPhase = ({
   wordCount,
   maxWordLength,
   timeLimit,
-  autoRevealCount
+  autoRevealCount,
 }: GamePlayPhaseProps) => {
   // State for score animation
   const [animatingScore, setAnimatingScore] = useState<number | null>(null)
   const [targetScore, setTargetScore] = useState<number>(score)
-  
+
+  // State for attempts
+  const [attempts, setAttempts] = useState<number>(() => {
+    // Set initial attempts based on word count
+    if (wordCount <= 5) return 2
+    if (wordCount <= 7) return 3
+    return 4 // For 10 words or more
+  })
+
+  // State for incorrect submission animation
+  const [isIncorrectSubmission, setIsIncorrectSubmission] = useState(false)
+
+  // State to track if the current selection is incorrect (for red color)
+  const [isIncorrectSelection, setIsIncorrectSelection] = useState(false)
+
   // Handle cell click/selection
   const handleCellClick = (cell: GridCell) => {
     // Don't allow selection if game is complete
-    if (isGameComplete) return;
-    
+    if (isGameComplete) return
+
     // Check if cell is already selected
     const cellIndex = selectedCells.findIndex(
-      c => c.row === cell.row && c.col === cell.col
+      (c) => c.row === cell.row && c.col === cell.col,
     )
-    
+
     if (cellIndex !== -1) {
       // If clicking the last selected cell, deselect it
       if (cellIndex === selectedCells.length - 1) {
@@ -106,65 +118,82 @@ const GamePlayPhase = ({
   // Check if selected cells form a valid word
   const checkSelectedWord = () => {
     if (selectedCells.length < 3) return
-    
-    const selectedWord = selectedCells.map(cell => cell.letter).join('')
-    
+
+    const selectedWord = selectedCells.map((cell) => cell.letter).join('')
+
     // Check if the word matches any of the words to find
     const wordIndex = wordsToFind.findIndex(
-      w => w.word === selectedWord && !w.found
+      (w) => w.word === selectedWord && !w.found,
     )
-    
+
     if (wordIndex !== -1) {
       // Word found!
       const updatedWordsToFind = [...wordsToFind]
       updatedWordsToFind[wordIndex].found = true
-      
+
       // Update score
       const targetWord = updatedWordsToFind[wordIndex]
-      
+
       // Get the current points for this word - either from pointsEarned or original points
       // This ensures we use the points that may have been modified by hints in word-list component
       let actualPoints = targetWord.pointsEarned || targetWord.points
-      
+
       // Store the points earned for this word if not already set
       if (!updatedWordsToFind[wordIndex].pointsEarned) {
         updatedWordsToFind[wordIndex].pointsEarned = actualPoints
       }
-      
+
       // Set up score animation
       setTargetScore(score + actualPoints)
       setAnimatingScore(score)
-      
+
       // Update the word's letters to use the selected cells instead of the predefined ones
       // This ensures the correct cells are highlighted when a word is found
       updatedWordsToFind[wordIndex].letters = [...selectedCells]
       setWordsToFind(updatedWordsToFind)
-      
+
       // Highlight the selected cells that form the word
       const updatedGrid = [...gameGrid]
-      
-      selectedCells.forEach(cell => {
+
+      selectedCells.forEach((cell) => {
         updatedGrid[cell.row][cell.col].revealed = true
       })
-      
+
       setGameGrid(updatedGrid)
-      
+
       // Play the word's pronunciation using the existing audio player
-      const originalWord = words.find(w => w.word.toLowerCase() === targetWord.word.toLowerCase())
+      const originalWord = words.find(
+        (w) => w.word.toLowerCase() === targetWord.word.toLowerCase(),
+      )
       if (originalWord && originalWord.id) {
         playAudio(originalWord.id)
       }
+
+      // Clear selection
+      setSelectedCells([])
+    } else {
+      // Word not found - reduce attempts and trigger animation
+      setAttempts((prev) => Math.max(0, prev - 1))
+
+      // Trigger the incorrect submission animation and mark cells as incorrect
+      setIsIncorrectSubmission(true)
+      setIsIncorrectSelection(true)
+
+      // Reset the animation state after the animation completes
+      setTimeout(() => {
+        setIsIncorrectSubmission(false)
+        setIsIncorrectSelection(false)
+        // Clear selection after animation completes
+        setSelectedCells([])
+      }, 600) // Animation duration + small buffer
     }
-    
-    // Clear selection
-    setSelectedCells([])
   }
 
   // Update points for a specific word
   const updateWordPoints = (wordIndex: number, points: number) => {
     if (wordIndex < 0 || wordIndex >= wordsToFind.length) return
     if (wordsToFind[wordIndex].found) return
-    
+
     const updatedWordsToFind = [...wordsToFind]
     updatedWordsToFind[wordIndex].pointsEarned = points
     setWordsToFind(updatedWordsToFind)
@@ -174,121 +203,176 @@ const GamePlayPhase = ({
   const showWordHint = (wordIndex: number) => {
     if (wordIndex < 0 || wordIndex >= wordsToFind.length) return
     if (wordsToFind[wordIndex].found) return
-    
+
     const targetWord = wordsToFind[wordIndex]
     const wordLength = targetWord.word.length
-    
+
     // Get available indices (not yet revealed)
-    const availableIndices = Array.from({ length: wordLength }, (_, i) => i)
-      .filter(i => !targetWord.revealedCharIndices.includes(i))
-    
+    const availableIndices = Array.from(
+      { length: wordLength },
+      (_, i) => i,
+    ).filter((i) => !targetWord.revealedCharIndices.includes(i))
+
     // If all characters are already revealed, do nothing
-    if (availableIndices.length === 0 || targetWord.revealedCharIndices.length >= wordLength) return
-    
+    if (
+      availableIndices.length === 0 ||
+      targetWord.revealedCharIndices.length >= wordLength
+    )
+      return
+
     // Select a random index to reveal
-    const randomIndex = availableIndices[Math.floor(Math.random() * availableIndices.length)]
-    
+    const randomIndex =
+      availableIndices[Math.floor(Math.random() * availableIndices.length)]
+
     // Update the word's revealed indices
     const updatedWordsToFind = [...wordsToFind]
     updatedWordsToFind[wordIndex].revealedCharIndices.push(randomIndex)
     updatedWordsToFind[wordIndex].hintRevealed = true
-    
+
     // Step 1: Set initial points based on auto-revealed count (same as checkSelectedWord)
     const wordPoints = targetWord.points
     let initialPoints = 0
-    
+
     // Use fixed percentages for different auto-reveal counts
     if (autoRevealCount === 0) {
       initialPoints = wordPoints // 100% of points for 0 auto-revealed
     } else if (autoRevealCount === 1) {
       initialPoints = Math.round(wordPoints * 0.85) // 85% for 1 auto-revealed
     } else if (autoRevealCount === 2) {
-      initialPoints = Math.round(wordPoints * 0.70) // 70% for 2 auto-revealed
+      initialPoints = Math.round(wordPoints * 0.7) // 70% for 2 auto-revealed
     } else {
       initialPoints = Math.round(wordPoints * 0.55) // 55% for 3+ auto-revealed
     }
-    
+
     // Step 2: Calculate fixed points reduction per additional hint
     // Each additional hint reduces by 10 points or 10% of initial points, whichever is greater
     const pointsPerHint = Math.max(10, Math.round(initialPoints * 0.1))
-    
+
     // Count additional hints beyond auto-revealed
-    const additionalHints = Math.max(0, targetWord.revealedCharIndices.length - autoRevealCount)
-    
+    const additionalHints = Math.max(
+      0,
+      targetWord.revealedCharIndices.length - autoRevealCount,
+    )
+
     // Calculate total reduction from additional hints
     const hintReduction = pointsPerHint * additionalHints
-    
+
     // Calculate actual points (with minimum guarantee of 25% of base points)
     const minimumPoints = Math.round(wordPoints * 0.25) // 25% minimum
     let newPoints = Math.max(minimumPoints, initialPoints - hintReduction)
-    
+
     // No additional calculation needed - the percentage-based approach already handles this
-    
+
     // Always set pointsEarned to ensure the animation has a value to work with
     updatedWordsToFind[wordIndex].pointsEarned = newPoints
-    
+
     setWordsToFind(updatedWordsToFind)
   }
   // Effect to handle score animation - flat 0.5 seconds duration
   useEffect(() => {
     if (animatingScore === null || animatingScore === targetScore) return
-    
+
     // Calculate total animation frames for 0.5 seconds (500ms)
     // Using requestAnimationFrame which typically runs at 60fps
     // So we need ~30 frames for 0.5 seconds
     const totalFrames = 30
     const scoreDifference = targetScore - animatingScore
-    
+
     // Calculate step size based on score difference and total frames
     // Use at least 1 as step size to ensure movement
-    const step = Math.max(1, Math.abs(Math.round(scoreDifference / totalFrames)))
-    
+    const step = Math.max(
+      1,
+      Math.abs(Math.round(scoreDifference / totalFrames)),
+    )
+
     // Determine direction
     const direction = animatingScore < targetScore ? 1 : -1
-    
+
     const timer = setTimeout(() => {
       // Calculate new score with appropriate step and direction
-      const newAnimatingScore = animatingScore + (step * direction)
-      
+      const newAnimatingScore = animatingScore + step * direction
+
       // Check if we've reached or passed the target
-      if ((direction > 0 && newAnimatingScore >= targetScore) || 
-          (direction < 0 && newAnimatingScore <= targetScore)) {
+      if (
+        (direction > 0 && newAnimatingScore >= targetScore) ||
+        (direction < 0 && newAnimatingScore <= targetScore)
+      ) {
         setAnimatingScore(null)
         setScore(targetScore)
       } else {
         setAnimatingScore(newAnimatingScore)
       }
     }, 500 / totalFrames) // Distribute frames evenly across 500ms
-    
+
     return () => clearTimeout(timer)
   }, [animatingScore, targetScore, setScore])
-  
+
+  // Check if game is over due to running out of attempts
+  const isOutOfAttempts = attempts <= 0
+
+  // Combined game over condition
+  const gameOver = isGameComplete || isOutOfAttempts
+
   return (
     <div className='flex flex-col gap-4 p-4'>
       {/* Game Header */}
-      <GameHeader 
-        score={animatingScore !== null ? animatingScore : score} 
-        timeRemaining={timeRemaining} 
+      <GameHeader
+        score={animatingScore !== null ? animatingScore : score}
+        timeRemaining={timeRemaining}
         wordCount={wordCount}
         maxWordLength={maxWordLength}
         timeLimit={timeLimit}
         autoRevealCount={autoRevealCount}
+        attempts={attempts}
       />
 
       {/* Game Completion Message */}
       {isGameComplete && <GameCompletionMessage />}
 
-      {/* Game grid */}
-      <GameGrid
-        gameGrid={gameGrid}
-        selectedCells={selectedCells}
-        wordsToFind={wordsToFind}
-        handleCellClick={handleCellClick}
-        showMaskedWords={showMaskedWords}
-      />
+      {/* Game Over Message (Out of Attempts) */}
+      {isOutOfAttempts && !isGameComplete && (
+        <GameCompletionMessage
+          title='Game Over'
+          message="You've run out of attempts. Try again!"
+        />
+      )}
 
-      {/* Word Selection Controls - Hidden when game is complete */}
-      {!isGameComplete && (
+      {/* Game grid with shake animation when incorrect */}
+      <div
+        className={isIncorrectSubmission ? 'incorrect-submission' : ''}
+        style={{
+          animation: isIncorrectSubmission ? 'shake 0.8s ease' : 'none',
+        }}
+      >
+        <style>
+          {`
+            @keyframes shake {
+              0% { transform: translateX(0); }
+              10% { transform: translateX(-5px); }
+              20% { transform: translateX(5px); }
+              30% { transform: translateX(-5px); }
+              40% { transform: translateX(5px); }
+              50% { transform: translateX(-5px); }
+              60% { transform: translateX(5px); }
+              70% { transform: translateX(-5px); }
+              80% { transform: translateX(5px); }
+              90% { transform: translateX(-5px); }
+              100% { transform: translateX(0); }
+            }
+          `}
+        </style>
+        <GameGrid
+          gameGrid={gameGrid}
+          selectedCells={selectedCells}
+          wordsToFind={wordsToFind}
+          handleCellClick={gameOver ? () => {} : handleCellClick}
+          showMaskedWords={showMaskedWords}
+          isIncorrectSelection={isIncorrectSelection}
+        />
+      </div>
+
+      {/* Word Selection Controls - Hidden when game is over */}
+      {!gameOver && (
         <div className='flex justify-center gap-2 mt-2'>
           <Button
             variant='outline'
@@ -309,10 +393,10 @@ const GamePlayPhase = ({
       )}
 
       {/* Word List */}
-      <WordList 
-        wordsToFind={wordsToFind} 
-        showMaskedWords={showMaskedWords} 
-        showWordHint={showWordHint} 
+      <WordList
+        wordsToFind={wordsToFind}
+        showMaskedWords={showMaskedWords}
+        showWordHint={showWordHint}
         words={words}
         playAudio={playAudio}
         autoRevealCount={autoRevealCount}

@@ -6,9 +6,10 @@ interface GameGridProps {
   wordsToFind: WordToFind[]
   handleCellClick: (cell: GridCell) => void
   showMaskedWords?: boolean // Optional prop for testing visualization
+  isIncorrectSelection?: boolean // Flag to indicate incorrect word selection
 }
 
-const GameGrid = ({ gameGrid, selectedCells, wordsToFind, handleCellClick, showMaskedWords = false }: GameGridProps) => {
+const GameGrid = ({ gameGrid, selectedCells, wordsToFind, handleCellClick, showMaskedWords = false, isIncorrectSelection = false }: GameGridProps) => {
   // Determine grid size dynamically based on the gameGrid dimensions
   const gridSize = gameGrid.length;
   
@@ -58,7 +59,11 @@ const GameGrid = ({ gameGrid, selectedCells, wordsToFind, handleCellClick, showM
               w-full aspect-square flex items-center justify-center 
               text-lg font-bold uppercase cursor-pointer rounded-md
               ${!cell.revealed ? 'bg-muted' : ''}
-              ${selectedCells.includes(cell) ? 'bg-primary text-white' : ''}
+              ${selectedCells.includes(cell) 
+                ? isIncorrectSelection 
+                  ? 'bg-red-500 text-white' 
+                  : 'bg-primary text-white' 
+                : ''}
               transition-all duration-200 hover:bg-primary/20
             `}
             onClick={() => handleCellClick(cell)}

@@ -1,5 +1,5 @@
 import { useEffect, useState, useCallback } from 'react'
-import { RefreshCw, Info, Eye, EyeOff } from 'lucide-react'
+import { RefreshCw, Eye, EyeOff } from 'lucide-react'
 import HeaderTitle from '@/resources/components/header-title.tsx'
 import BackButton from '@/resources/components/back-button.tsx'
 import {
@@ -917,31 +917,7 @@ const GameScreen = () => {
               </Tooltip>
             </TooltipProvider>
           )}
-          {/* Game Info */}
-          <TooltipProvider>
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <Info
-                  size={18}
-                  className='text-muted-foreground cursor-pointer hover:text-foreground'
-                />
-              </TooltipTrigger>
-              <TooltipContent className='w-[320px] p-4 mr-4'>
-                <div className='flex flex-col gap-2'>
-                  <h4 className='text-base font-bold'>How to Play:</h4>
-                  <ul className='text-sm space-y-1'>
-                    <li>- Find hidden words in the grid</li>
-                    <li>- Select to connect letters and form words</li>
-                    <li>
-                      - Words can be placed horizontally, vertically, or
-                      diagonally
-                    </li>
-                    <li>- Find all words before time runs out</li>
-                  </ul>
-                </div>
-              </TooltipContent>
-            </Tooltip>
-          </TooltipProvider>
+          {/* Information icon removed as requested */}
         </div>
       </div>
 
