@@ -1,4 +1,6 @@
 import { useEffect, useState, useCallback } from 'react'
+import Confetti from 'react-confetti'
+import { useWindowSize } from 'react-use'
 import { RefreshCw, Eye, EyeOff } from 'lucide-react'
 import HeaderTitle from '@/resources/components/header-title.tsx'
 import BackButton from '@/resources/components/back-button.tsx'
@@ -120,6 +122,16 @@ const GameScreen = () => {
   useEffect(() => {
     let timer: NodeJS.Timeout | null = null
 
+    // Check if game is complete (all words found)
+    const gameComplete =
+      wordsToFind.length >= wordCount && wordsToFind.every((w) => w.found)
+
+    // Stop the timer if game is complete
+    if (gameComplete && timerActive) {
+      setTimerActive(false)
+      return
+    }
+
     if (timerActive && timeRemaining !== null && timeRemaining > 0) {
       timer = setInterval(() => {
         setTimeRemaining((prev) => {
@@ -143,7 +155,7 @@ const GameScreen = () => {
     return () => {
       if (timer) clearInterval(timer)
     }
-  }, [timerActive, timeRemaining, wordsToFind])
+  }, [timerActive, timeRemaining, wordsToFind, wordCount])
 
   // Generate game grid when words are loaded and settings are confirmed
   useEffect(() => {
@@ -865,8 +877,46 @@ const GameScreen = () => {
   const isGameComplete =
     wordsToFind.length >= wordCount && wordsToFind.every((w) => w.found)
 
+  // State for confetti
+  const { width, height } = useWindowSize()
+  const [showConfetti, setShowConfetti] = useState(false)
+  const [confettiRecycle, setConfettiRecycle] = useState(false)
+
+  // Show confetti when game is completed
+  useEffect(() => {
+    if (isGameComplete) {
+      setShowConfetti(true)
+      setConfettiRecycle(true)
+
+      // Stop generating new confetti after 2 seconds
+      // but keep existing pieces falling until they reach the bottom
+      const timer = setTimeout(() => {
+        setConfettiRecycle(false)
+      }, 2000)
+
+      return () => clearTimeout(timer)
+    }
+  }, [isGameComplete])
+
   return (
     <div className='flex flex-col w-[400px] min-h-[600px] scrollbar-hide'>
+      {showConfetti && (
+        <Confetti
+          width={width}
+          height={height}
+          numberOfPieces={200}
+          recycle={confettiRecycle}
+          gravity={0.15}
+          tweenDuration={2000}
+          style={{ position: 'fixed', top: 0, left: 0, zIndex: 1000 }}
+          onConfettiComplete={() => {
+            // When all confetti pieces have fallen off the screen, hide the component
+            if (!confettiRecycle) {
+              setShowConfetti(false)
+            }
+          }}
+        />
+      )}
       <div className='flex w-full flex-row justify-between p-4 border-b-[1px]'>
         <BackButton />
         <HeaderTitle title='Word Game' />
