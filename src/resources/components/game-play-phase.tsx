@@ -45,7 +45,6 @@ interface GamePlayPhaseProps {
   isGameComplete: boolean
   gameOutcome: GameOutcome
   showMaskedWords: boolean
-  toggleShowMaskedWords: () => void
   playAudio: (id: string) => void
   // Game settings
   wordCount: number
@@ -69,7 +68,6 @@ const GamePlayPhase = ({
   isGameComplete,
   gameOutcome,
   showMaskedWords,
-  toggleShowMaskedWords,
   playAudio,
   // Game settings
   wordCount,

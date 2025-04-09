@@ -1,9 +1,20 @@
 import { useEffect, useState, useCallback, useRef } from 'react'
 import Confetti from 'react-confetti'
 import { useWindowSize } from 'react-use'
-import { RefreshCw, Eye, EyeOff } from 'lucide-react'
+import { RefreshCw, Eye, EyeOff, ChevronLeft } from 'lucide-react'
+import { goBack } from 'react-chrome-extension-router'
 import HeaderTitle from '@/resources/components/header-title.tsx'
-import BackButton from '@/resources/components/back-button.tsx'
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from '@/components/ui/alert-dialog'
 import {
   Tooltip,
   TooltipContent,
@@ -34,18 +45,17 @@ const WORD_DIFFICULTY_SCORES = {
   advanced: 300,
 }
 
-// Predefined colors for words (10 distinct colors)
 const WORD_COLORS = [
-  '#dc2626', // Bright red
-  '#16a34a', // Bright green
-  '#0891b2', // Cyan
-  '#2563eb', // Royal blue
-  '#9333ea', // Purple
-  '#ca8a04', // Yellow
-  '#e11d48', // Rose
-  '#f97316', // Orange
-  '#0d9488', // Teal
-  '#6d28d9', // Violet
+  '#2e7d32', // Dark green
+  '#1976d2', // Blue
+  '#9c27b0', // Purple
+  '#00acc1', // Teal
+  '#5e35b1', // Violet
+  '#fdd835', // Yellow
+  '#009688', // Teal-green
+  '#3f51b5', // Indigo
+  '#f9a826', // Safe orange
+  '#8bc34a', // Light green
 ]
 
 const GameScreen = () => {
@@ -125,6 +135,8 @@ const GameScreen = () => {
         setLoading(false)
       }
     } catch (error) {
+      setLoading(false)
+    } finally {
       setLoading(false)
     }
   }, [])
@@ -1149,7 +1161,7 @@ const GameScreen = () => {
         />
       )}
       <div className='flex w-full flex-row justify-between p-4 border-b-[1px]'>
-        <BackButton />
+        <BackButton isGamePlaying={gameStarted} />
         <HeaderTitle title='Word Game' />
         <div className='flex flex-row gap-2 items-center'>
           {/* Test Mode Toggle - Only show in non-release environments */}
@@ -1266,7 +1278,6 @@ const GameScreen = () => {
             isGameComplete={isGameComplete}
             gameOutcome={gameOutcome}
             showMaskedWords={showMaskedWords}
-            toggleShowMaskedWords={toggleShowMaskedWords}
             playAudio={playAudio}
             wordCount={wordCount}
             maxWordLength={maxWordLength}
@@ -1277,6 +1288,46 @@ const GameScreen = () => {
         )}
       </div>
     </div>
+  )
+}
+
+interface BackButtonProps {
+  isGamePlaying: boolean
+}
+
+const BackButton = ({ isGamePlaying }: BackButtonProps) => {
+  // If game is not playing, just go back directly
+  if (!isGamePlaying) {
+    return <ChevronLeft className='cursor-pointer' onClick={() => goBack()} />
+  }
+
+  // If game is playing, show confirmation dialog
+  return (
+    <AlertDialog>
+      <AlertDialogTrigger asChild>
+        <ChevronLeft className='cursor-pointer' />
+      </AlertDialogTrigger>
+      <AlertDialogContent>
+        <AlertDialogHeader>
+          <AlertDialogTitle>Exit Game?</AlertDialogTitle>
+          <AlertDialogDescription>
+            Your progress will be saved automatically. You may resume from this
+            point at a later time. Would you like to exit now?
+          </AlertDialogDescription>
+        </AlertDialogHeader>
+        <AlertDialogFooter>
+          <AlertDialogCancel className='cursor-pointer'>
+            Cancel
+          </AlertDialogCancel>
+          <AlertDialogAction
+            className='cursor-pointer'
+            onClick={() => goBack()}
+          >
+            Exit Game
+          </AlertDialogAction>
+        </AlertDialogFooter>
+      </AlertDialogContent>
+    </AlertDialog>
   )
 }
 

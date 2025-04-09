@@ -11,6 +11,7 @@
     "build-production": "tsc -b && rm -rf dist && vite build --mode production"
   },
   "dependencies": {
+    "@radix-ui/react-alert-dialog": "^1.1.7",
     "@radix-ui/react-dialog": "^1.1.6",
     "@radix-ui/react-select": "^2.1.6",
     "@radix-ui/react-separator": "^1.1.2",
