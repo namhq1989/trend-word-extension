@@ -8,7 +8,9 @@ import WordReference from '@/resources/components/word-reference.tsx'
 import Word from '@/resources/components/word.tsx'
 import WordListScreen from '@/resources/screens/word-list-screen.tsx'
 import { useEffect, useState, useRef } from 'react'
-import useWordControllerStore, { useWordMessageListener } from '@/app/controllers/word-controller'
+import useWordControllerStore, {
+  useWordMessageListener,
+} from '@/app/controllers/word-controller'
 import Spinner from '@/components/ui/spinner'
 import {
   Tooltip,
@@ -17,6 +19,7 @@ import {
   TooltipTrigger,
 } from '@/components/ui/tooltip'
 import { IWord } from '@/app/models/word.ts'
+import { GameStatus } from '@/app/models/game-types'
 import GameScreen from './game-screen'
 
 // Component to display the countdown to next word notification
@@ -24,7 +27,6 @@ const NextWordCountdown = () => {
   const [countdown, setCountdown] = useState('')
 
   useEffect(() => {
-    console.log('[COUNTDOWN] Fetching next notification time')
     const fetchNextNotificationTime = async () => {
       try {
         const response = await chrome.runtime.sendMessage({
@@ -32,14 +34,12 @@ const NextWordCountdown = () => {
         })
 
         if (response.success && response.alarmInfo) {
-          console.log('[COUNTDOWN] Received alarm info:', response.alarmInfo)
-          
           const startTime = Date.now()
           const scheduledTime = response.alarmInfo.scheduledTime
-          
+
           // Initial update
           updateCountdown(scheduledTime - startTime)
-          
+
           // Set interval to update countdown every second
           const intervalId = setInterval(() => {
             const currentTime = Date.now()
@@ -64,8 +64,10 @@ const NextWordCountdown = () => {
       } else {
         // Convert to hours, minutes, seconds
         const hours = Math.floor(remainingMs / (1000 * 60 * 60))
-        const minutes = Math.floor((remainingMs % (1000 * 60 * 60)) / (1000 * 60))
-        
+        const minutes = Math.floor(
+          (remainingMs % (1000 * 60 * 60)) / (1000 * 60),
+        )
+
         // If less than 60 seconds but greater than 0, still show as 01m
         if (hours === 0 && minutes === 0 && remainingMs > 0) {
           setCountdown('01m')
@@ -91,8 +93,10 @@ const NextWordCountdown = () => {
     <TooltipProvider>
       <Tooltip>
         <TooltipTrigger asChild>
-          <div className="flex items-center text-xs text-base-content/70 cursor-pointer">
-            <span className='text-xs font-bold text-muted-foreground'>in {countdown}</span>
+          <div className='flex items-center text-xs text-base-content/70 cursor-pointer'>
+            <span className='text-xs font-bold text-muted-foreground'>
+              in {countdown}
+            </span>
           </div>
         </TooltipTrigger>
         <TooltipContent className='mr-4'>
@@ -106,61 +110,74 @@ const NextWordCountdown = () => {
 const HomeScreen = () => {
   const { newWord, fetchNewWord, isFetchingNewWord } = useWordControllerStore()
   const [displayedWord, setDisplayedWord] = useState<IWord | null>(null)
-  const [isTransitioning, setIsTransitioning] = useState(false)
   const [fadeState, setFadeState] = useState('in') // 'in' or 'out'
   const lastWordIdRef = useRef<string | null>(null)
-  // No longer needed as we're using a simpler approach for the countdown
+  const [savedGameState, setSavedGameState] = useState<any>(null)
 
   // Set up the message listener to receive word updates from background
   useWordMessageListener()
-  
-  console.log('[HOME-SCREEN] Component rendered, isTransitioning:', isTransitioning, 'fadeState:', fadeState)
 
-  // Initial fetch
+  // Initial fetch and check for saved game state
   useEffect(() => {
     const fetch = async () => {
-      console.log('[HOME-SCREEN] Initial fetch of word')
       await fetchNewWord()
     }
 
+    // Check for saved game state
+    const checkSavedGameState = async () => {
+      try {
+        const result = await chrome.storage.local.get(['gameState'])
+        if (result.gameState) {
+          // console.log('Found saved game state:', result.gameState)
+
+          // If game is in progress, mark it as paused when the popup is opened
+          if (result.gameState.gameStatus === GameStatus.IN_PROGRESS) {
+            const updatedGameState = {
+              ...result.gameState,
+              gameStatus: GameStatus.PAUSED,
+              lastSaved: new Date().toISOString(),
+            }
+
+            // Save the updated game state
+            await chrome.storage.local.set({ gameState: updatedGameState })
+            setSavedGameState(updatedGameState)
+          } else {
+            setSavedGameState(result.gameState)
+          }
+        }
+      } catch (error) {
+        console.error('Error retrieving saved game state:', error)
+      }
+    }
+
     fetch().then()
+    checkSavedGameState()
   }, [fetchNewWord])
 
   // Handle new word updates
   useEffect(() => {
     if (newWord && !isFetchingNewWord) {
-      console.log('[HOME-SCREEN] New word available:', newWord.word, 'Current displayed word:', displayedWord?.word || 'none')
-      
       if (!displayedWord) {
         // Initial load - no animation needed
-        console.log('[HOME-SCREEN] Initial load - setting displayed word without animation')
         setDisplayedWord(newWord)
         lastWordIdRef.current = newWord.id
       } else if (newWord.id !== lastWordIdRef.current) {
         // New word detected - start transition
-        console.log('[HOME-SCREEN] New word differs from current - starting transition')
-        setIsTransitioning(true)
         setFadeState('out')
       }
     }
   }, [newWord, isFetchingNewWord, displayedWord])
 
-
   // Handle animation transitions
   const handleTransitionEnd = () => {
-    console.log('[HOME-SCREEN] Transition ended with fadeState:', fadeState)
-    
     if (fadeState === 'out') {
       // Update displayed word after fade out
-      console.log('[HOME-SCREEN] Fade out complete, updating displayed word to:', newWord?.word)
       setDisplayedWord(newWord)
       lastWordIdRef.current = newWord?.id || null
       // Word has changed, the countdown will be updated via the background script
       setFadeState('in')
     } else {
       // Animation complete
-      console.log('[HOME-SCREEN] Fade in complete, animation finished')
-      setIsTransitioning(false)
     }
   }
 
@@ -177,6 +194,13 @@ const HomeScreen = () => {
             title='Game'
             icon={Gamepad2}
             onClick={() => goTo(GameScreen)}
+            indicator={
+              savedGameState &&
+              (savedGameState.gameStatus === GameStatus.PAUSED ||
+                savedGameState.gameStatus === 'paused')
+                ? 'red'
+                : undefined
+            }
           />
           <MenuItem
             title='Settings'
@@ -184,7 +208,7 @@ const HomeScreen = () => {
             onClick={() => goTo(SettingsScreen)}
           />
         </div>
-        
+
         <div className='flex flex-row gap-2 justify-center items-center'>
           <HeaderTitle title='WordDrop' />
           <NextWordCountdown />
@@ -200,6 +224,7 @@ const HomeScreen = () => {
             className={`transition-opacity duration-500 ease-in-out ${fadeState === 'out' ? 'opacity-0' : 'opacity-100'}`}
             onTransitionEnd={handleTransitionEnd}
           >
+            {/* Game state banner removed */}
             <Word word={displayedWord} />
             <div className='px-4'>
               <Separator />

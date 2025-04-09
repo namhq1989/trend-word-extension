@@ -10,14 +10,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
-
-// Game settings interface
-export interface GameSettings {
-  wordCount: number
-  maxWordLength: number
-  timeLimit: number
-  autoRevealCount: number
-}
+import { GameSettings } from '@/app/models/game-types'
 
 interface GameSettingsPhaseProps {
   onStartGame: (settings: GameSettings) => void
@@ -42,14 +35,27 @@ const GameSettingsPhase = ({
   autoRevealCount,
   setAutoRevealCount,
 }: GameSettingsPhaseProps) => {
+  // State to track if there's a paused game
+  const [hasPausedGame, setHasPausedGame] = React.useState(false)
+
+  // Check for paused game on component mount
+  useEffect(() => {
+    chrome.storage.local.get(['gameState'], (result) => {
+      if (result.gameState && result.gameState.gameStatus === 'paused') {
+        setHasPausedGame(true)
+      }
+    })
+  }, [])
+
   // Handle start game button click
-  const handleStartGame = () => {
+  const handleStartGame = (forceNew = false) => {
     // Create settings object
     const settings = {
       wordCount,
       maxWordLength,
       timeLimit,
       autoRevealCount,
+      forceNewGame: forceNew,
     }
 
     // Save settings to Chrome storage
@@ -103,7 +109,7 @@ const GameSettingsPhase = ({
   )
 
   return (
-    <div className='flex flex-col gap-6'>
+    <div className='flex flex-col gap-6 p-4'>
       <div className='flex flex-col gap-2'>
         <h2 className='text-xl font-bold'>Game Settings</h2>
         <p className='text-sm text-muted-foreground'>
@@ -202,9 +208,33 @@ const GameSettingsPhase = ({
       </div>
 
       <div className='flex flex-col gap-4'>
-        <Button onClick={handleStartGame} className='w-full' size='lg'>
-          Start Game
-        </Button>
+        {hasPausedGame ? (
+          <>
+            <Button
+              onClick={() => handleStartGame(false)}
+              className='w-full'
+              size='lg'
+            >
+              Resume Paused Game
+            </Button>
+            <Button
+              onClick={() => handleStartGame(true)}
+              className='w-full'
+              variant='outline'
+              size='lg'
+            >
+              Start New Game
+            </Button>
+          </>
+        ) : (
+          <Button
+            onClick={() => handleStartGame(false)}
+            className='w-full'
+            size='lg'
+          >
+            Start Game
+          </Button>
+        )}
       </div>
     </div>
   )

@@ -9,7 +9,7 @@ chrome.storage.local.set(
     apiHost: import.meta.env.VITE_API_HOST,
   },
   () => {
-    console.log('API host saved to storage')
+    // console.log('API host saved to storage')
   },
 )
 

@@ -5,6 +5,7 @@ import GameGrid from '@/resources/components/game-grid.tsx'
 import WordList from '@/resources/components/word-list.tsx'
 import GameHeader from '@/resources/components/game-header.tsx'
 import GameCompletionMessage from '@/resources/components/game-completion-message.tsx'
+import { WordSubmission, GameOutcome } from '@/app/models/game-types'
 
 // Grid cell interface
 export interface GridCell {
@@ -42,6 +43,7 @@ interface GamePlayPhaseProps {
   setWordsToFind: React.Dispatch<React.SetStateAction<WordToFind[]>>
   timeRemaining: number | null
   isGameComplete: boolean
+  gameOutcome: GameOutcome
   showMaskedWords: boolean
   toggleShowMaskedWords: () => void
   playAudio: (id: string) => void
@@ -50,6 +52,7 @@ interface GamePlayPhaseProps {
   maxWordLength: number
   timeLimit: number
   autoRevealCount: number
+  onWordSubmission: (submission: WordSubmission) => void
 }
 
 const GamePlayPhase = ({
@@ -64,13 +67,16 @@ const GamePlayPhase = ({
   setWordsToFind,
   timeRemaining,
   isGameComplete,
+  gameOutcome,
   showMaskedWords,
+  toggleShowMaskedWords,
   playAudio,
   // Game settings
   wordCount,
   maxWordLength,
   timeLimit,
   autoRevealCount,
+  onWordSubmission,
 }: GamePlayPhaseProps) => {
   // State for score animation
   const [animatingScore, setAnimatingScore] = useState<number | null>(null)
@@ -89,6 +95,9 @@ const GamePlayPhase = ({
 
   // State to track if the current selection is incorrect (for red color)
   const [isIncorrectSelection, setIsIncorrectSelection] = useState(false)
+
+  // State to track word selection start time
+  const [startTime, setStartTime] = useState<number | null>(null)
 
   // Check if two cells are adjacent (horizontally, vertically, or diagonally)
   const areCellsAdjacent = (cell1: GridCell, cell2: GridCell): boolean => {
@@ -119,6 +128,11 @@ const GamePlayPhase = ({
         setSelectedCells((prev: GridCell[]) => prev.slice(0, cellIndex + 1))
       }
     } else {
+      // First cell selection - record start time
+      if (selectedCells.length === 0) {
+        setStartTime(Date.now())
+      }
+
       // Check if the new cell is adjacent to the last selected cell
       if (selectedCells.length > 0) {
         const lastSelectedCell = selectedCells[selectedCells.length - 1]
@@ -126,6 +140,7 @@ const GamePlayPhase = ({
         // If not adjacent, reset selection and start a new path
         if (!areCellsAdjacent(lastSelectedCell, cell)) {
           setSelectedCells([cell])
+          setStartTime(Date.now()) // Reset start time for new selection
           return
         }
       }
@@ -146,40 +161,54 @@ const GamePlayPhase = ({
       (w) => w.word === selectedWord && !w.found,
     )
 
+    // Prepare submission data variables
+    let isWordFound = false
+    let wordToSubmit = selectedWord
+    let pointsEarned = 0
+    let attemptNumberValue = 0
+    let currentAttempts = attempts
+
     if (wordIndex !== -1) {
       // Word found!
+      isWordFound = true
       const updatedWordsToFind = [...wordsToFind]
       updatedWordsToFind[wordIndex].found = true
 
       // Update score
       const targetWord = updatedWordsToFind[wordIndex]
+      wordToSubmit = targetWord.word
 
       // Get the current points for this word - either from pointsEarned or original points
       // This ensures we use the points that may have been modified by hints in word-list component
-      let actualPoints = targetWord.pointsEarned || targetWord.points
+      pointsEarned = targetWord.pointsEarned || targetWord.points
 
       // Store the points earned for this word if not already set
       if (!updatedWordsToFind[wordIndex].pointsEarned) {
-        updatedWordsToFind[wordIndex].pointsEarned = actualPoints
+        updatedWordsToFind[wordIndex].pointsEarned = pointsEarned
       }
 
+      attemptNumberValue = wordsToFind.length - updatedWordsToFind.length + 1
+
+      // Reset start time for next word
+      setStartTime(null)
+
       // Set up score animation
-      setTargetScore(score + actualPoints)
+      setTargetScore(score + pointsEarned)
       setAnimatingScore(score)
 
       // Update the word's letters to use the selected cells instead of the predefined ones
       // This ensures the correct cells are highlighted when a word is found
       updatedWordsToFind[wordIndex].letters = [...selectedCells]
-      setWordsToFind(updatedWordsToFind)
 
-      // Highlight the selected cells that form the word
-      const updatedGrid = [...gameGrid]
-
+      // Update the game grid to mark these cells as revealed
+      const updatedGameGrid = [...gameGrid]
       selectedCells.forEach((cell) => {
-        updatedGrid[cell.row][cell.col].revealed = true
+        // Set the revealed property to true for each cell in the selected word
+        updatedGameGrid[cell.row][cell.col].revealed = true
       })
+      setGameGrid(updatedGameGrid)
 
-      setGameGrid(updatedGrid)
+      setWordsToFind(updatedWordsToFind)
 
       // Play the word's pronunciation using the existing audio player
       const originalWord = words.find(
@@ -193,7 +222,8 @@ const GamePlayPhase = ({
       setSelectedCells([])
     } else {
       // Word not found - reduce attempts and trigger animation
-      setAttempts((prev) => Math.max(0, prev - 1))
+      currentAttempts = Math.max(0, attempts - 1)
+      setAttempts(currentAttempts)
 
       // Trigger the incorrect submission animation and mark cells as incorrect
       setIsIncorrectSubmission(true)
@@ -207,6 +237,17 @@ const GamePlayPhase = ({
         setSelectedCells([])
       }, 600) // Animation duration + small buffer
     }
+
+    // Notify GameScreen about the word submission (for both correct and incorrect cases)
+    onWordSubmission({
+      word: wordToSubmit,
+      found: isWordFound,
+      points: pointsEarned,
+      timestamp: Date.now(),
+      attemptNumber: attemptNumberValue,
+      duration: startTime ? Date.now() - startTime : 0,
+      attempts: currentAttempts, // Pass the current attempts value
+    })
   }
 
   // Update points for a specific word
@@ -346,16 +387,8 @@ const GamePlayPhase = ({
         attempts={attempts}
       />
 
-      {/* Game Completion Message */}
-      {isGameComplete && <GameCompletionMessage />}
-
-      {/* Game Over Message (Out of Attempts) */}
-      {isOutOfAttempts && !isGameComplete && (
-        <GameCompletionMessage
-          title='Game Over'
-          message="You've run out of attempts. Try again!"
-        />
-      )}
+      {/* Game Completion Message - Win or Loss */}
+      {isGameComplete && <GameCompletionMessage gameOutcome={gameOutcome} />}
 
       {/* Game grid with shake animation when incorrect */}
       <div

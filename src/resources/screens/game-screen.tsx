@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback } from 'react'
+import { useEffect, useState, useCallback, useRef } from 'react'
 import Confetti from 'react-confetti'
 import { useWindowSize } from 'react-use'
 import { RefreshCw, Eye, EyeOff } from 'lucide-react'
@@ -13,16 +13,21 @@ import {
 import Spinner from '@/components/ui/spinner'
 import { IWord } from '@/app/models/word.ts'
 import { useAudioPlayer } from '@/resources/components/hooks/use-audio-player.ts'
-import GameSettingsPhase, {
+import {
+  WordSubmission,
   GameSettings,
-} from '@/resources/components/game-settings-phase.tsx'
+  GameOutcome,
+  GameStatus,
+} from '@/app/models/game-types'
+import GameSettingsPhase from '@/resources/components/game-settings-phase'
 import GamePlayPhase, {
   GridCell,
   WordToFind,
 } from '@/resources/components/game-play-phase'
 import NotEnoughWordsMessage from '@/resources/components/not-enough-words-message'
 
-// Word difficulty scoring
+// Constants
+const AUTO_SAVE_INTERVAL_SECONDS = 5
 const WORD_DIFFICULTY_SCORES = {
   beginner: 100,
   intermediate: 200,
@@ -54,10 +59,22 @@ const GameScreen = () => {
   const [gameStarted, setGameStarted] = useState(false)
   const [showMaskedWords, setShowMaskedWords] = useState(false) // For testing - toggle to show/hide masked words
   const [notEnoughWords, setNotEnoughWords] = useState(false) // Track if there are enough words
-
-  // Game settings state
-  const [showSettings, setShowSettings] = useState(true) // Show settings screen by default
+  const [wordSubmissions, setWordSubmissions] = useState<WordSubmission[]>([])
+  const [remainingAttempts, setRemainingAttempts] = useState<number | null>(
+    null,
+  )
+  const [gameOutcome, setGameOutcome] = useState<GameOutcome>(
+    GameOutcome.IN_PROGRESS,
+  )
+  // Initialize gameStatus to IN_PROGRESS instead of COMPLETED to prevent auto-clearing saved games
+  const [gameStatus, setGameStatus] = useState<GameStatus>(
+    GameStatus.IN_PROGRESS,
+  )
+  const [showSettings, setShowSettings] = useState(false) // Don't show settings screen by default
   const [wordCount, setWordCount] = useState<number>(7) // Default: 7 words
+  // Removed unused hasPausedGame variable
+  const [showContinuePrompt, setShowContinuePrompt] = useState(false) // Show continue prompt
+  const [savedGameState, setSavedGameState] = useState<any>(null) // Store the saved game state
   const [maxWordLength, setMaxWordLength] = useState<number>(8) // Default: 8 characters
   const [timeLimit, setTimeLimit] = useState<number>(5) // Default: 5 minutes
   const [autoRevealCount, setAutoRevealCount] = useState<number>(2) // Default: 2 characters
@@ -70,6 +87,8 @@ const GameScreen = () => {
   // Fetch words from IndexedDB
   const fetchWords = useCallback(async () => {
     setLoading(true)
+    setNotEnoughWords(false)
+
     try {
       // Get the total count of words first
       const countResponse = await chrome.runtime.sendMessage({
@@ -79,14 +98,13 @@ const GameScreen = () => {
       })
 
       if (!countResponse.success) {
-        console.error('Failed to get word count:', countResponse)
         setLoading(false)
         return
       }
 
       // Calculate how many words we need to fetch to have enough suitable candidates
       const totalWords = countResponse.total
-      const fetchLimit = Math.min(totalWords, 100) // Fetch up to 50 words max
+      const fetchLimit = Math.min(totalWords, 100) // Fetch up to 100 words max
 
       // Get random offset to fetch different words each time
       const randomStart =
@@ -104,18 +122,17 @@ const GameScreen = () => {
       if (response.success && response.words) {
         setWords(response.words)
       } else {
-        console.error('Failed to fetch words:', response)
+        setLoading(false)
       }
     } catch (error) {
-      console.error('Error fetching words:', error)
-    } finally {
       setLoading(false)
     }
   }, [])
 
-  // Initialize game
+  // Initialize game - only fetch words if no paused game is found
   useEffect(() => {
-    fetchWords()
+    // We'll handle fetching words after checking for saved game state
+    // Don't automatically fetch words here to avoid resetting the game
   }, [fetchWords])
 
   // Timer effect
@@ -164,6 +181,122 @@ const GameScreen = () => {
     }
   }, [words, gameStarted, showSettings])
 
+  // Auto-save game state at regular intervals when game is in progress
+  useEffect(() => {
+    let autoSaveInterval: NodeJS.Timeout | null = null
+
+    // Only set up auto-save if game is in progress
+    if (gameStatus === GameStatus.IN_PROGRESS && gameStarted) {
+      autoSaveInterval = setInterval(() => {
+        // Create game state object
+        const gameState = {
+          gameGrid,
+          wordsToFind: wordsToFind.map((word) => ({
+            word: word.word,
+            found: word.found,
+            points: word.points,
+            pointsEarned: word.pointsEarned,
+            color: word.color,
+            hintRevealed: word.hintRevealed,
+            revealedCharIndices: word.revealedCharIndices,
+            definitions: word.definitions,
+          })),
+          score: wordSubmissions.reduce(
+            (acc, submission) => acc + submission.points,
+            0,
+          ),
+          gameStarted,
+          wordSubmissions,
+          wordCount,
+          maxWordLength,
+          timeLimit,
+          remainingAttempts,
+          autoRevealCount,
+          timeRemaining,
+          timerActive,
+          gameStatus: 'paused', // Use string value for consistent comparison
+          gameOutcome,
+          lastSaved: new Date().toISOString(),
+          isGameComplete:
+            wordsToFind.length >= wordCount &&
+            wordsToFind.every((w) => w.found),
+        }
+
+        // Save to Chrome Extension local storage
+        chrome.storage.local.set({ gameState: gameState }, () => {
+          if (chrome.runtime.lastError) {
+            // Handle error silently
+          }
+        })
+      }, AUTO_SAVE_INTERVAL_SECONDS * 1000)
+    } else if (
+      gameStatus === GameStatus.COMPLETED ||
+      gameStatus === GameStatus.PAUSED
+    ) {
+      // If game is completed or paused, clear any existing auto-save interval
+      if (autoSaveInterval) {
+        clearInterval(autoSaveInterval)
+        autoSaveInterval = null
+      }
+
+      // If game is completed AND the game has actually started (not just on component mount),
+      // remove the saved game state
+      if (gameStatus === GameStatus.COMPLETED && gameStarted) {
+        chrome.storage.local.remove('gameState', () => {
+          if (chrome.runtime.lastError) {
+            // Handle error silently
+          }
+        })
+      }
+    }
+
+    // Cleanup function to clear interval when component unmounts or dependencies change
+    return () => {
+      if (autoSaveInterval) {
+        clearInterval(autoSaveInterval)
+      }
+
+      // When unmounting, if game is in progress, mark it as paused in storage
+      if (gameStatus === GameStatus.IN_PROGRESS && gameStarted) {
+        // Create game state object for saving on unmount
+        const unmountGameState = {
+          gameStatus: 'paused', // Use string value for consistent comparison
+          gameStarted,
+          wordCount,
+          maxWordLength,
+          timeLimit,
+          autoRevealCount,
+          gameGrid,
+          wordsToFind,
+          score,
+          wordSubmissions,
+          remainingAttempts,
+          timeRemaining,
+          timerActive,
+          isGameComplete,
+          gameOutcome,
+          lastSaved: new Date().toISOString(),
+        }
+
+        chrome.storage.local.set({ gameState: unmountGameState })
+      }
+    }
+  }, [
+    gameStatus,
+    gameStarted,
+    gameGrid,
+    wordsToFind,
+    wordSubmissions,
+    wordCount,
+    maxWordLength,
+    timeLimit,
+    remainingAttempts,
+    autoRevealCount,
+    timeRemaining,
+    timerActive,
+    gameOutcome,
+  ])
+
   // Validate that all words are correctly placed in the grid after rendering
   useEffect(() => {
     if (gameGrid.length > 0 && wordsToFind.length > 0 && gameStarted) {
@@ -173,12 +306,8 @@ const GameScreen = () => {
 
   // Initialize the game with words and grid
   const initializeGame = () => {
-    // console.log('🎮 Initializing game with settings:', {
-    //   wordCount,
-    //   maxWordLength,
-    //   timeLimit,
-    //   autoRevealCount,
-    // })
+    // Set game status to in-progress
+    setGameStatus(GameStatus.IN_PROGRESS)
     // Select words for the game based on settings
     const gameWords = selectGameWords(words, wordCount)
 
@@ -197,9 +326,6 @@ const GameScreen = () => {
 
     // Ensure we have exactly the requested number of words
     if (placedWords.length !== wordCount) {
-      console.warn(
-        `Expected ${wordCount} placed words, but got ${placedWords.length}. Retrying...`,
-      )
       // If we don't have exactly the requested number of words, try again
       initializeGame()
       return
@@ -211,9 +337,6 @@ const GameScreen = () => {
       for (const cell of wordObj.letters) {
         const posKey = `${cell.row},${cell.col}`
         if (cellPositions.has(posKey)) {
-          // console.error(
-          //   `Found duplicate cell at ${posKey} in word "${wordObj.word}"`,
-          // )
           return true
         }
         cellPositions.add(posKey)
@@ -222,9 +345,6 @@ const GameScreen = () => {
     })
 
     if (hasDuplicateCells) {
-      // console.error(
-      //   'Duplicate cells detected in word placement. Retrying game initialization...',
-      // )
       initializeGame()
       return
     }
@@ -291,11 +411,8 @@ const GameScreen = () => {
     )
     const shuffledTopWords = shuffleArray(topWords)
 
-    // If we don't have enough suitable words, log a warning and return what we have
+    // If we don't have enough suitable words, return what we have
     if (shuffledTopWords.length < count) {
-      console.warn(
-        `Not enough suitable words: found ${shuffledTopWords.length}, needed ${count}`,
-      )
       return shuffledTopWords
     }
 
@@ -565,7 +682,7 @@ const GameScreen = () => {
       }
 
       if (!placed) {
-        console.log(`Failed to place word: ${wordText} after all attempts`)
+        // Failed to place word after all attempts
       }
     })
 
@@ -652,7 +769,14 @@ const GameScreen = () => {
     setShowSettings(true)
     setTimerActive(false)
     setTimeRemaining(null)
-    fetchWords()
+    setGameStatus(GameStatus.COMPLETED)
+
+    // Remove saved game state from storage
+    chrome.storage.local.remove('gameState', () => {
+      if (chrome.runtime.lastError) {
+        // Handle error silently
+      }
+    })
   }
 
   // Toggle showing masked words (for testing)
@@ -668,31 +792,14 @@ const GameScreen = () => {
 
   // Validate that all words are correctly placed in the grid
   const validateWordsInGrid = () => {
-    // Log validation start time for performance tracking
-    // console.time('Grid Validation')
-    // console.log('🔍 VALIDATION: Starting grid validation...')
-    // console.log(
-    //   `🔍 VALIDATION: Grid size: ${gameGrid.length}x${gameGrid[0].length}`,
-    // )
-    // console.log(
-    //   `🔍 VALIDATION: Words to find: ${wordsToFind.length}`,
-    //   wordsToFind.map((w) => w.word),
-    // )
-
     let allWordsValid = true
 
     // Check each word in wordsToFind
-    wordsToFind.forEach((wordObj, index) => {
+    wordsToFind.forEach((wordObj) => {
       const { word, letters } = wordObj
-      console.log(
-        `🔍 VALIDATION: Checking word "${word}" (${index + 1}/${wordsToFind.length})...`,
-      )
 
       // Verify that the word has the correct number of letters
       if (letters.length !== word.length) {
-        // console.error(
-        //   `❌ VALIDATION ERROR: Word "${word}" has ${letters.length} letters in grid but should have ${word.length}`,
-        // )
         allWordsValid = false
         return
       }
@@ -702,17 +809,6 @@ const GameScreen = () => {
 
       // Check if the reconstructed word matches the expected word
       if (reconstructedWord !== word) {
-        // console.error(
-        //   `❌ VALIDATION ERROR: Word "${word}" does not match grid cells. Found: "${reconstructedWord}"`,
-        // )
-        // console.error(
-        //   'Cell details:',
-        //   letters.map((cell) => ({
-        //     letter: cell.letter,
-        //     row: cell.row,
-        //     col: cell.col,
-        //   })),
-        // )
         allWordsValid = false
         return
       }
@@ -720,18 +816,6 @@ const GameScreen = () => {
       // Check if all cells are marked as part of a word
       const allCellsMarked = letters.every((cell) => cell.partOfWord)
       if (!allCellsMarked) {
-        // console.error(
-        //   `❌ VALIDATION ERROR: Not all cells for word "${word}" are marked as partOfWord`,
-        // )
-        // console.error(
-        //   'Cell details:',
-        //   letters.map((cell) => ({
-        //     letter: cell.letter,
-        //     row: cell.row,
-        //     col: cell.col,
-        //     partOfWord: cell.partOfWord,
-        //   })),
-        // )
         allWordsValid = false
         return
       }
@@ -745,13 +829,6 @@ const GameScreen = () => {
           cell.col >= gameGrid[0].length,
       )
       if (invalidPositions.length > 0) {
-        // console.error(
-        //   `❌ VALIDATION ERROR: Word "${word}" has cells outside grid bounds`,
-        // )
-        // console.error(
-        //   'Invalid positions:',
-        //   invalidPositions.map((cell) => ({ row: cell.row, col: cell.col })),
-        // )
         allWordsValid = false
         return
       }
@@ -765,29 +842,11 @@ const GameScreen = () => {
         )
       })
       if (!allCellsMatchGrid) {
-        // console.error(
-        //   `❌ VALIDATION ERROR: Not all cells for word "${word}" match the grid`,
-        // )
-        // console.error(
-        //   'Cell details:',
-        //   letters.map((cell) => {
-        //     const gridCell = gameGrid[cell.row][cell.col]
-        //     return {
-        //       expected: { letter: cell.letter, partOfWord: cell.partOfWord },
-        //       actual: {
-        //         letter: gridCell.letter,
-        //         partOfWord: gridCell.partOfWord,
-        //       },
-        //       position: { row: cell.row, col: cell.col },
-        //     }
-        //   }),
-        // )
         allWordsValid = false
         return
       }
 
       // Check if the cells form a continuous pattern (adjacent cells)
-      let isContinuous = true
       for (let i = 1; i < letters.length; i++) {
         const prevCell = letters[i - 1]
         const currCell = letters[i]
@@ -796,51 +855,12 @@ const GameScreen = () => {
 
         // For standard directions, cells should be adjacent (diff of 0 or 1 in each direction)
         if (rowDiff > 1 || colDiff > 1) {
-          // For complex patterns, we'll be more lenient, just log a warning
-          // console.warn(
-          //   `⚠️ VALIDATION WARNING: Word "${word}" may use a complex pattern. Non-adjacent cells detected.`,
-          // )
-          // console.warn('Cell transition:', {
-          //   from: {
-          //     row: prevCell.row,
-          //     col: prevCell.col,
-          //     letter: prevCell.letter,
-          //   },
-          //   to: {
-          //     row: currCell.row,
-          //     col: currCell.col,
-          //     letter: currCell.letter,
-          //   },
-          //   diff: { row: rowDiff, col: colDiff },
-          // })
-          isContinuous = false
+          // For complex patterns, we'll be more lenient
           break
         }
       }
-
-      if (isContinuous) {
-        // console.log(
-        //   `✅ VALIDATION: Word "${word}" is valid and forms a continuous pattern`,
-        // )
-      } else {
-        // console.log(
-        //   `✅ VALIDATION: Word "${word}" is valid but may use a complex pattern`,
-        // )
-      }
     })
 
-    if (allWordsValid) {
-      // console.log(
-      //   '✅ VALIDATION COMPLETE: All words are correctly placed in the grid',
-      // )
-    } else {
-      // console.error(
-      //   '❌ VALIDATION FAILED: Some words are not correctly placed in the grid',
-      // )
-    }
-
-    // Log validation end time
-    // console.timeEnd('Grid Validation')
     return allWordsValid
   }
 
@@ -859,8 +879,189 @@ const GameScreen = () => {
     return newArray
   }
 
+  // Track the last logged submission
+  const lastLoggedSubmission = useRef<string | null>(null)
+
+  // Ref to track if we've already handled the attempts=0 state
+  const attemptsHandledRef = useRef(false)
+
+  // Handle word submission
+  const handleWordSubmission = (submission: WordSubmission) => {
+    setWordSubmissions((prev) => [...prev, submission])
+
+    // Update remaining attempts if provided
+    if (submission.attempts !== undefined) {
+      setRemainingAttempts(submission.attempts)
+    }
+  }
+
+  // Check for saved game state on component mount
+  useEffect(() => {
+    const checkSavedGameState = async () => {
+      try {
+        // Use direct chrome.storage.local.get to ensure we're getting the latest data
+        const result = await new Promise<{ gameState?: any }>((resolve) => {
+          chrome.storage.local.get(['gameState'], (items) => {
+            resolve(items)
+          })
+        })
+
+        // Check if we have a valid paused game state
+        // Note: We need to check for both enum value and string value since the storage might have either
+        const isPaused =
+          result.gameState &&
+          (result.gameState.gameStatus === GameStatus.PAUSED ||
+            result.gameState.gameStatus === 'paused')
+
+        // If we have a paused game state with the required properties
+        if (
+          result.gameState &&
+          (isPaused ||
+            result.gameState.gameStatus === GameStatus.IN_PROGRESS) &&
+          result.gameState.wordsToFind &&
+          result.gameState.wordsToFind.length > 0
+        ) {
+          // Force the status to be 'paused' for consistency
+          result.gameState.gameStatus = GameStatus.PAUSED
+          // We found a paused game - store it and show the continue prompt
+          setSavedGameState(result.gameState)
+
+          // Important: If we have a paused game, we should immediately continue it
+          // rather than showing the continue prompt
+          continuePausedGame(result.gameState)
+        } else {
+          // No paused game found, show settings screen
+          setShowSettings(true)
+          setShowContinuePrompt(false)
+          // Since there's no paused game, we can safely fetch words
+          fetchWords()
+        }
+      } catch (error) {
+        // On error, default to showing settings
+        setShowSettings(true)
+        setShowContinuePrompt(false)
+        // Fetch words on error as well
+        fetchWords()
+      }
+    }
+
+    checkSavedGameState()
+  }, [fetchWords])
+
+  // Function to continue a paused game
+  const continuePausedGame = (gameStateData: any = null) => {
+    // Use provided gameStateData or fallback to savedGameState
+    const stateToUse = gameStateData || savedGameState
+
+    if (!stateToUse) {
+      return
+    }
+
+    // If we're using the savedGameState, make sure to store the provided gameStateData
+    if (gameStateData && !savedGameState) {
+      setSavedGameState(gameStateData)
+    }
+
+    // Load game settings
+    setWordCount(stateToUse.wordCount || 7)
+    setMaxWordLength(stateToUse.maxWordLength || 8)
+    setTimeLimit(stateToUse.timeLimit || 5)
+    setAutoRevealCount(stateToUse.autoRevealCount || 2)
+
+    // Load game state
+    setGameGrid(stateToUse.gameGrid || [])
+    setWordsToFind(stateToUse.wordsToFind || [])
+    setScore(stateToUse.score || 0)
+    setWordSubmissions(stateToUse.wordSubmissions || [])
+    setRemainingAttempts(stateToUse.remainingAttempts || null)
+    setTimeRemaining(stateToUse.timeRemaining || null)
+
+    // Set game as started and hide settings
+    setGameStarted(true)
+    setShowSettings(false)
+    setShowContinuePrompt(false)
+
+    // Update game status
+    setGameStatus(GameStatus.IN_PROGRESS)
+    setTimerActive(true)
+  }
+
+  // Function to start a new game
+  const startNewGame = async () => {
+    // Clear the saved game state
+    try {
+      await chrome.storage.local.remove('gameState')
+    } catch (error) {
+      // Handle error silently
+    }
+
+    // Reset state
+    setSavedGameState(null)
+    setShowContinuePrompt(false)
+
+    // Show settings screen
+    setShowSettings(true)
+  }
+
+  // Effect to handle when attempts reach 0
+  useEffect(() => {
+    // Only proceed if the game has started and attempts have been initialized
+    if (!gameStarted || remainingAttempts === null) return
+
+    if (remainingAttempts === 0 && !attemptsHandledRef.current) {
+      // Mark as handled to prevent infinite loops
+      attemptsHandledRef.current = true
+
+      // Stop the timer
+      setTimerActive(false)
+
+      // Set game as lost - do this first to ensure state is updated
+      setGameOutcome(GameOutcome.LOSS)
+      setGameStatus(GameStatus.COMPLETED)
+
+      // Reveal all words - create a new array to avoid dependency issues
+      const updatedWordsToFind = [...wordsToFind].map((word) => ({
+        ...word,
+        found: true,
+      }))
+
+      // Update the words to find
+      setWordsToFind(updatedWordsToFind)
+    } else if (remainingAttempts > 0) {
+      // Reset the handled flag when attempts are greater than 0
+      attemptsHandledRef.current = false
+    }
+  }, [remainingAttempts, gameStarted, wordsToFind])
+
+  // Update last logged submission when a new word is submitted
+  useEffect(() => {
+    if (wordSubmissions.length > 0) {
+      const currentSubmission = wordSubmissions[wordSubmissions.length - 1]
+      if (currentSubmission.word !== lastLoggedSubmission.current) {
+        lastLoggedSubmission.current = currentSubmission.word
+      }
+    }
+  }, [wordSubmissions])
+
   // Handle starting the game with settings
-  const handleStartGame = (settings: GameSettings) => {
+  const handleStartGame = async (settings: GameSettings) => {
+    // If forceNewGame is true, we don't need to check for paused games
+    if (settings.forceNewGame) {
+      // Start a new game directly
+      setWordCount(settings.wordCount)
+      setMaxWordLength(settings.maxWordLength)
+      setTimeLimit(settings.timeLimit)
+      setAutoRevealCount(settings.autoRevealCount)
+
+      // First hide settings screen, then fetch words
+      setShowSettings(false)
+      setShowContinuePrompt(false)
+      setGameStarted(false)
+      fetchWords() // This will trigger initializeGame in the useEffect
+      return
+    }
+
+    // If we get here and forceNewGame is false, it means we're starting a game normally
     // Update game settings
     setWordCount(settings.wordCount)
     setMaxWordLength(settings.maxWordLength)
@@ -869,22 +1070,52 @@ const GameScreen = () => {
 
     // First hide settings screen, then fetch words
     setShowSettings(false)
+    setShowContinuePrompt(false)
     setGameStarted(false)
     fetchWords() // This will trigger initializeGame in the useEffect
   }
 
-  // Check if game is complete
+  // Check if game is complete (all words found or out of attempts)
   const isGameComplete =
-    wordsToFind.length >= wordCount && wordsToFind.every((w) => w.found)
+    (wordsToFind.length >= wordCount && wordsToFind.every((w) => w.found)) ||
+    (remainingAttempts === 0 && gameStarted)
+
+  // Update game status when game is complete
+  useEffect(() => {
+    if (isGameComplete && gameStatus === GameStatus.IN_PROGRESS) {
+      setGameStatus(GameStatus.COMPLETED)
+    }
+  }, [isGameComplete, gameStatus])
+
+  // Update game outcome based on whether all words are found
+  // This effect runs AFTER the remainingAttempts effect
+  useEffect(() => {
+    if (gameStarted) {
+      const allWordsFound =
+        wordsToFind.length >= wordCount && wordsToFind.every((w) => w.found)
+
+      // Don't override LOSS state if attempts are 0
+      if (remainingAttempts === 0) {
+        setGameOutcome(GameOutcome.LOSS)
+        setGameStatus(GameStatus.COMPLETED)
+      } else if (allWordsFound) {
+        setGameOutcome(GameOutcome.WIN)
+        setGameStatus(GameStatus.COMPLETED)
+      } else {
+        setGameOutcome(GameOutcome.IN_PROGRESS)
+      }
+    }
+  }, [wordsToFind, wordCount, gameStarted, remainingAttempts])
 
   // State for confetti
   const { width, height } = useWindowSize()
   const [showConfetti, setShowConfetti] = useState(false)
   const [confettiRecycle, setConfettiRecycle] = useState(false)
 
-  // Show confetti when game is completed
+  // Show confetti when game is won
   useEffect(() => {
-    if (isGameComplete) {
+    // Only show confetti if the game is complete AND won
+    if (isGameComplete && gameOutcome === GameOutcome.WIN) {
       setShowConfetti(true)
       setConfettiRecycle(true)
 
@@ -951,7 +1182,7 @@ const GameScreen = () => {
             </TooltipProvider>
           )}
           {/* Only show the reset icon when not in settings phase */}
-          {!showSettings && (
+          {!showSettings && !showContinuePrompt && (
             <TooltipProvider>
               <Tooltip>
                 <TooltipTrigger asChild>
@@ -971,54 +1202,80 @@ const GameScreen = () => {
         </div>
       </div>
 
-      {loading ? (
-        <div className='flex mt-20 justify-center items-center'>
-          <Spinner />
-        </div>
-      ) : showSettings ? (
-        <div className='flex flex-col p-4 gap-8'>
-          <div className='flex flex-col gap-2'>
-            <GameSettingsPhase
-              onStartGame={handleStartGame}
-              wordCount={wordCount}
-              setWordCount={setWordCount}
-              maxWordLength={maxWordLength}
-              setMaxWordLength={setMaxWordLength}
-              timeLimit={timeLimit}
-              setTimeLimit={setTimeLimit}
-              autoRevealCount={autoRevealCount}
-              setAutoRevealCount={setAutoRevealCount}
-            />
+      <div className='flex-1 flex flex-col'>
+        {loading ? (
+          <div className='flex-1 flex justify-center items-center'>
+            <Spinner />
           </div>
-        </div>
-      ) : notEnoughWords ? (
-        <NotEnoughWordsMessage
-          wordCount={wordCount}
-          maxWordLength={maxWordLength}
-          resetGame={resetGame}
-        />
-      ) : (
-        <GamePlayPhase
-          words={words}
-          gameGrid={gameGrid}
-          wordsToFind={wordsToFind}
-          score={score}
-          setScore={setScore}
-          selectedCells={selectedCells}
-          setSelectedCells={setSelectedCells}
-          setGameGrid={setGameGrid}
-          setWordsToFind={setWordsToFind}
-          timeRemaining={timeRemaining}
-          isGameComplete={isGameComplete}
-          showMaskedWords={showMaskedWords}
-          toggleShowMaskedWords={toggleShowMaskedWords}
-          playAudio={playAudio}
-          wordCount={wordCount}
-          maxWordLength={maxWordLength}
-          timeLimit={timeLimit}
-          autoRevealCount={autoRevealCount}
-        />
-      )}
+        ) : notEnoughWords ? (
+          <NotEnoughWordsMessage
+            wordCount={wordCount}
+            maxWordLength={maxWordLength}
+            resetGame={resetGame}
+          />
+        ) : showContinuePrompt ? (
+          <div className='flex flex-col gap-6 p-6 items-center justify-center h-full'>
+            <div className='text-center'>
+              <h2 className='text-xl font-semibold mb-2'>Game in Progress</h2>
+              <p className='text-sm text-muted-foreground mb-4'>
+                You have a paused game with{' '}
+                {savedGameState?.wordsToFind?.filter((w: any) => w.found)
+                  .length || 0}{' '}
+                of {savedGameState?.wordsToFind?.length || 0} words found.
+              </p>
+              <div className='flex flex-col gap-3'>
+                <button
+                  onClick={continuePausedGame}
+                  className='px-4 py-2 bg-primary text-primary-foreground rounded-md hover:bg-primary/90 transition-colors'
+                >
+                  Continue Game
+                </button>
+                <button
+                  onClick={startNewGame}
+                  className='px-4 py-2 bg-secondary text-secondary-foreground rounded-md hover:bg-secondary/90 transition-colors'
+                >
+                  Start New Game
+                </button>
+              </div>
+            </div>
+          </div>
+        ) : showSettings ? (
+          <GameSettingsPhase
+            onStartGame={handleStartGame}
+            wordCount={wordCount}
+            setWordCount={setWordCount}
+            maxWordLength={maxWordLength}
+            setMaxWordLength={setMaxWordLength}
+            timeLimit={timeLimit}
+            setTimeLimit={setTimeLimit}
+            autoRevealCount={autoRevealCount}
+            setAutoRevealCount={setAutoRevealCount}
+          />
+        ) : (
+          <GamePlayPhase
+            words={words}
+            gameGrid={gameGrid}
+            wordsToFind={wordsToFind}
+            score={score}
+            setScore={setScore}
+            selectedCells={selectedCells}
+            setSelectedCells={setSelectedCells}
+            setGameGrid={setGameGrid}
+            setWordsToFind={setWordsToFind}
+            timeRemaining={timeRemaining}
+            isGameComplete={isGameComplete}
+            gameOutcome={gameOutcome}
+            showMaskedWords={showMaskedWords}
+            toggleShowMaskedWords={toggleShowMaskedWords}
+            playAudio={playAudio}
+            wordCount={wordCount}
+            maxWordLength={maxWordLength}
+            timeLimit={timeLimit}
+            autoRevealCount={autoRevealCount}
+            onWordSubmission={handleWordSubmission}
+          />
+        )}
+      </div>
     </div>
   )
 }
