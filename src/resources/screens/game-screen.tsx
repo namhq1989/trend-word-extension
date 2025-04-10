@@ -203,7 +203,7 @@ const GameScreen = () => {
 
       // Set game outcome to LOSS if time runs out
       if (gameStatus !== GameStatus.COMPLETED) {
-        console.log('Setting game outcome to LOSS (time out)')
+        // console.log('Setting game outcome to LOSS (time out)')
         setGameOutcome(GameOutcome.LOSS)
         setGameStatus(GameStatus.COMPLETED)
       }
@@ -242,6 +242,13 @@ const GameScreen = () => {
         // Store the interval ID in the ref so we can access it in resetGame
         autoSaveIntervalRef.current = autoSaveInterval
         // Create game state object
+        // Calculate the correct attempts value based on word count
+        const correctAttempts = calculateAttempts(wordCount)
+
+        // Use the current remainingAttempts value if it exists, otherwise use the calculated value
+        const attemptsToSave =
+          remainingAttempts !== null ? remainingAttempts : correctAttempts
+
         const gameState = {
           gameGrid,
           wordsToFind: wordsToFind.map((word) => ({
@@ -263,7 +270,8 @@ const GameScreen = () => {
           wordCount,
           maxWordLength,
           timeLimit,
-          remainingAttempts,
+          remainingAttempts: attemptsToSave, // Use the correctly calculated value
+          attempts: attemptsToSave, // Add a dedicated field for attempts
           autoRevealCount,
           timeRemaining,
           timerActive,
@@ -274,6 +282,13 @@ const GameScreen = () => {
             wordsToFind.length >= wordCount &&
             wordsToFind.every((w) => w.found),
         }
+
+        console.log(
+          'Saving game state with attempts:',
+          remainingAttempts,
+          'wordCount:',
+          wordCount,
+        )
 
         // Save to Chrome Extension local storage
         chrome.storage.local.set({ gameState: gameState }, () => {
@@ -316,6 +331,13 @@ const GameScreen = () => {
         !isResetting &&
         !isResettingRef.current
       ) {
+        // Calculate the correct attempts value based on word count
+        const correctAttempts = calculateAttempts(wordCount)
+
+        // Use the current remainingAttempts value if it exists, otherwise use the calculated value
+        const attemptsToSave =
+          remainingAttempts !== null ? remainingAttempts : correctAttempts
+
         // Create game state object for saving on unmount
         const unmountGameState = {
           gameStatus: 'paused', // Use string value for consistent comparison
@@ -328,13 +350,21 @@ const GameScreen = () => {
           wordsToFind,
           score,
           wordSubmissions,
-          remainingAttempts,
+          remainingAttempts: attemptsToSave,
+          attempts: attemptsToSave, // Add dedicated attempts field
           timeRemaining,
           timerActive,
           isGameComplete,
           gameOutcome,
           lastSaved: new Date().toISOString(),
         }
+
+        console.log(
+          'Saving unmount game state with attempts:',
+          attemptsToSave,
+          'wordCount:',
+          wordCount,
+        )
 
         chrome.storage.local.set({ gameState: unmountGameState })
       }
@@ -1034,7 +1064,6 @@ const GameScreen = () => {
   const continuePausedGame = (gameStateData: any = null) => {
     // Use provided gameStateData or fallback to savedGameState
     const stateToUse = gameStateData || savedGameState
-
     if (!stateToUse) {
       return
     }
@@ -1044,18 +1073,38 @@ const GameScreen = () => {
       setSavedGameState(gameStateData)
     }
 
+    console.log('Continuing paused game with data:', stateToUse)
+
     // Load game settings
     setWordCount(stateToUse.wordCount || 7)
     setMaxWordLength(stateToUse.maxWordLength || 8)
     setTimeLimit(stateToUse.timeLimit || 5)
     setAutoRevealCount(stateToUse.autoRevealCount || 2)
 
+    console.log('Loading game with wordCount:', stateToUse.wordCount)
+    console.log('Saved remainingAttempts:', stateToUse.remainingAttempts)
+
+    // Calculate what the attempts should be based on the word count
+    const calculatedAttempts = calculateAttempts(stateToUse.wordCount || 7)
+    console.log('Calculated attempts based on wordCount:', calculatedAttempts)
+
     // Load game state
     setGameGrid(stateToUse.gameGrid || [])
     setWordsToFind(stateToUse.wordsToFind || [])
     setScore(stateToUse.score || 0)
     setWordSubmissions(stateToUse.wordSubmissions || [])
-    setRemainingAttempts(stateToUse.remainingAttempts || null)
+
+    // First try to use the dedicated attempts field, then fallback to remainingAttempts, then calculate
+    const attemptsToUse =
+      stateToUse.attempts !== undefined && stateToUse.attempts !== null
+        ? stateToUse.attempts
+        : stateToUse.remainingAttempts !== undefined &&
+            stateToUse.remainingAttempts !== null
+          ? stateToUse.remainingAttempts
+          : calculatedAttempts
+
+    console.log('Setting remainingAttempts to:', attemptsToUse)
+    setRemainingAttempts(attemptsToUse)
     setTimeRemaining(stateToUse.timeRemaining || null)
 
     // Set game as started and hide settings
@@ -1132,6 +1181,18 @@ const GameScreen = () => {
     }
   }, [wordSubmissions])
 
+  // Calculate attempts based on word count
+  const calculateAttempts = (count: number): number => {
+    // Use if-else-if to ensure only one condition applies
+    if (count <= 5) {
+      return 2
+    } else if (count <= 7) {
+      return 3
+    } else {
+      return 4 // For 10 words or more
+    }
+  }
+
   // Handle starting the game with settings
   const handleStartGame = async (settings: GameSettings) => {
     // If forceNewGame is true, we don't need to check for paused games
@@ -1141,6 +1202,10 @@ const GameScreen = () => {
       setMaxWordLength(settings.maxWordLength)
       setTimeLimit(settings.timeLimit)
       setAutoRevealCount(settings.autoRevealCount)
+
+      // Calculate and set the initial attempts based on word count
+      const initialAttempts = calculateAttempts(settings.wordCount)
+      setRemainingAttempts(initialAttempts)
 
       // First hide settings screen, then fetch words
       setShowSettings(false)
@@ -1155,6 +1220,10 @@ const GameScreen = () => {
     setMaxWordLength(settings.maxWordLength)
     setTimeLimit(settings.timeLimit)
     setAutoRevealCount(settings.autoRevealCount)
+
+    // Calculate and set the initial attempts based on word count
+    const initialAttempts = calculateAttempts(settings.wordCount)
+    setRemainingAttempts(initialAttempts)
 
     // First hide settings screen, then fetch words
     setShowSettings(false)
@@ -1367,6 +1436,12 @@ const GameScreen = () => {
             timeLimit={timeLimit}
             autoRevealCount={autoRevealCount}
             onWordSubmission={handleWordSubmission}
+            initialAttempts={
+              remainingAttempts !== null
+                ? remainingAttempts
+                : calculateAttempts(wordCount)
+            }
+            onAttemptsChange={(attempts) => setRemainingAttempts(attempts)}
           />
         )}
       </div>

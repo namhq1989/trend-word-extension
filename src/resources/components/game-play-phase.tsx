@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect, useRef } from 'react'
 import { Button } from '@/components/ui/button.tsx'
 import { IWord } from '@/app/models/word.ts'
 import GameGrid from '@/resources/components/game-grid.tsx'
@@ -52,6 +52,9 @@ interface GamePlayPhaseProps {
   timeLimit: number
   autoRevealCount: number
   onWordSubmission: (submission: WordSubmission) => void
+  // For tracking attempts
+  initialAttempts: number
+  onAttemptsChange?: (attempts: number) => void
 }
 
 const GamePlayPhase = ({
@@ -75,18 +78,21 @@ const GamePlayPhase = ({
   timeLimit,
   autoRevealCount,
   onWordSubmission,
+  // For tracking attempts
+  initialAttempts,
+  onAttemptsChange,
 }: GamePlayPhaseProps) => {
   // State for score animation
   const [animatingScore, setAnimatingScore] = useState<number | null>(null)
   const [targetScore, setTargetScore] = useState<number>(score)
 
-  // State for attempts
-  const [attempts, setAttempts] = useState<number>(() => {
-    // Set initial attempts based on word count
-    if (wordCount <= 5) return 2
-    if (wordCount <= 7) return 3
-    return 4 // For 10 words or more
-  })
+  // State for attempts - now only using initialAttempts from parent
+  const [attempts, setAttempts] = useState<number>(initialAttempts)
+
+  // Update attempts when initialAttempts prop changes
+  useEffect(() => {
+    setAttempts(initialAttempts)
+  }, [initialAttempts])
 
   // State for incorrect submission animation
   const [isIncorrectSubmission, setIsIncorrectSubmission] = useState(false)
@@ -96,6 +102,18 @@ const GamePlayPhase = ({
 
   // State to track word selection start time
   const [startTime, setStartTime] = useState<number | null>(null)
+
+  // Effect to notify parent component when attempts change
+  // Use a ref to track the previous attempts value
+  const prevAttemptsRef = useRef<number>(initialAttempts)
+
+  useEffect(() => {
+    // Only notify parent if the attempts value has actually changed
+    if (onAttemptsChange && attempts !== prevAttemptsRef.current) {
+      onAttemptsChange(attempts)
+      prevAttemptsRef.current = attempts
+    }
+  }, [attempts, onAttemptsChange])
 
   // Check if two cells are adjacent (horizontally, vertically, or diagonally)
   const areCellsAdjacent = (cell1: GridCell, cell2: GridCell): boolean => {
