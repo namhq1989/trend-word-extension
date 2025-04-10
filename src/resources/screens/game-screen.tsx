@@ -83,13 +83,15 @@ const GameScreen = () => {
   const [showSettings, setShowSettings] = useState(false) // Don't show settings screen by default
   const [wordCount, setWordCount] = useState<number>(7) // Default: 7 words
   // Removed unused hasPausedGame variable
-  const [showContinuePrompt, setShowContinuePrompt] = useState(false) // Show continue prompt
   const [savedGameState, setSavedGameState] = useState<any>(null) // Store the saved game state
   const [maxWordLength, setMaxWordLength] = useState<number>(8) // Default: 8 characters
   const [timeLimit, setTimeLimit] = useState<number>(5) // Default: 5 minutes
   const [autoRevealCount, setAutoRevealCount] = useState<number>(2) // Default: 2 characters
   const [timeRemaining, setTimeRemaining] = useState<number | null>(null) // Time remaining in seconds
   const [timerActive, setTimerActive] = useState(false) // Track if timer is active
+
+  const isResettingRef = useRef(false)
+  const [isResetting, setIsResetting] = useState(false)
 
   // Audio player hook
   const { playAudio } = useAudioPlayer()
@@ -155,6 +157,25 @@ const GameScreen = () => {
     const gameComplete =
       wordsToFind.length >= wordCount && wordsToFind.every((w) => w.found)
 
+    // Log game completion status
+    // console.log('Game completion check:', {
+    //   gameComplete,
+    //   wordsToFindLength: wordsToFind.length,
+    //   wordCount,
+    //   allWordsFound: wordsToFind.every((w) => w.found),
+    // })
+
+    // Set game outcome when game is complete, but ONLY if it's not already set to LOSS
+    if (
+      gameComplete &&
+      gameStatus !== GameStatus.COMPLETED &&
+      gameOutcome !== GameOutcome.LOSS
+    ) {
+      // console.log('Setting game outcome to WIN')
+      setGameOutcome(GameOutcome.WIN)
+      setGameStatus(GameStatus.COMPLETED)
+    }
+
     // Stop the timer if game is complete
     if (gameComplete && timerActive) {
       setTimerActive(false)
@@ -179,12 +200,19 @@ const GameScreen = () => {
       }))
       setWordsToFind(updatedWordsToFind)
       setTimerActive(false)
+
+      // Set game outcome to LOSS if time runs out
+      if (gameStatus !== GameStatus.COMPLETED) {
+        console.log('Setting game outcome to LOSS (time out)')
+        setGameOutcome(GameOutcome.LOSS)
+        setGameStatus(GameStatus.COMPLETED)
+      }
     }
 
     return () => {
       if (timer) clearInterval(timer)
     }
-  }, [timerActive, timeRemaining, wordsToFind, wordCount])
+  }, [timerActive, timeRemaining, wordsToFind, wordCount, gameStatus])
 
   // Generate game grid when words are loaded and settings are confirmed
   useEffect(() => {
@@ -193,13 +221,26 @@ const GameScreen = () => {
     }
   }, [words, gameStarted, showSettings])
 
+  // Create a ref to store the autoSaveInterval ID so we can access it in resetGame
+  const autoSaveIntervalRef = useRef<NodeJS.Timeout | null>(null)
+
   // Auto-save game state at regular intervals when game is in progress
   useEffect(() => {
     let autoSaveInterval: NodeJS.Timeout | null = null
 
+    if (isResetting || isResettingRef.current) {
+      return
+    }
+
     // Only set up auto-save if game is in progress
     if (gameStatus === GameStatus.IN_PROGRESS && gameStarted) {
       autoSaveInterval = setInterval(() => {
+        if (isResetting || isResettingRef.current) {
+          return
+        }
+
+        // Store the interval ID in the ref so we can access it in resetGame
+        autoSaveIntervalRef.current = autoSaveInterval
         // Create game state object
         const gameState = {
           gameGrid,
@@ -269,7 +310,12 @@ const GameScreen = () => {
       }
 
       // When unmounting, if game is in progress, mark it as paused in storage
-      if (gameStatus === GameStatus.IN_PROGRESS && gameStarted) {
+      if (
+        gameStatus === GameStatus.IN_PROGRESS &&
+        gameStarted &&
+        !isResetting &&
+        !isResettingRef.current
+      ) {
         // Create game state object for saving on unmount
         const unmountGameState = {
           gameStatus: 'paused', // Use string value for consistent comparison
@@ -307,6 +353,7 @@ const GameScreen = () => {
     timeRemaining,
     timerActive,
     gameOutcome,
+    isResetting,
   ])
 
   // Validate that all words are correctly placed in the grid after rendering
@@ -772,22 +819,50 @@ const GameScreen = () => {
     return true
   }
 
-  // Game state management functions have been moved to GamePlayPhase component
-
-  // Reset the game
   const resetGame = () => {
-    setGameStarted(false)
-    setSelectedCells([])
-    setShowSettings(true)
-    setTimerActive(false)
-    setTimeRemaining(null)
-    setGameStatus(GameStatus.COMPLETED)
+    // Set both the state and ref to prevent any auto-saves
+    isResettingRef.current = true
+    setIsResetting(true)
 
-    // Remove saved game state from storage
+    // Clear the autoSaveInterval if it exists
+    if (autoSaveIntervalRef.current) {
+      clearInterval(autoSaveIntervalRef.current)
+      autoSaveIntervalRef.current = null
+    }
+
+    // First remove gameState from storage
     chrome.storage.local.remove('gameState', () => {
-      if (chrome.runtime.lastError) {
-        // Handle error silently
-      }
+      // Only after successful removal, update the state variables
+      // Wrap in setTimeout to ensure they happen after the storage operation completes
+      setTimeout(() => {
+        // Reset all game-related state variables
+        setGameStarted(false)
+        setTimerActive(false)
+        setGameStatus(GameStatus.IN_PROGRESS) // Change to IN_PROGRESS to ensure proper state
+        setGameOutcome(GameOutcome.IN_PROGRESS) // Reset game outcome to hide completion message
+        setSelectedCells([])
+        setShowSettings(true) // Show settings phase
+        setTimeRemaining(null)
+        setWordSubmissions([]) // Clear word submissions
+        setRemainingAttempts(null) // Reset attempts
+
+        // Reset game grid and words to find (if needed)
+        if (gameGrid.length > 0) {
+          setGameGrid([])
+        }
+        if (wordsToFind.length > 0) {
+          setWordsToFind([])
+        }
+
+        // Reset score
+        setScore(0)
+
+        // Clear resetting flag after a longer delay to ensure all operations complete
+        setTimeout(() => {
+          setIsResetting(false)
+          isResettingRef.current = false
+        }, 300)
+      }, 100)
     })
   }
 
@@ -935,23 +1010,18 @@ const GameScreen = () => {
         ) {
           // Force the status to be 'paused' for consistency
           result.gameState.gameStatus = GameStatus.PAUSED
-          // We found a paused game - store it and show the continue prompt
+          // We found a paused game - store it and continue it immediately
           setSavedGameState(result.gameState)
-
-          // Important: If we have a paused game, we should immediately continue it
-          // rather than showing the continue prompt
           continuePausedGame(result.gameState)
         } else {
           // No paused game found, show settings screen
           setShowSettings(true)
-          setShowContinuePrompt(false)
           // Since there's no paused game, we can safely fetch words
           fetchWords()
         }
       } catch (error) {
         // On error, default to showing settings
         setShowSettings(true)
-        setShowContinuePrompt(false)
         // Fetch words on error as well
         fetchWords()
       }
@@ -991,7 +1061,6 @@ const GameScreen = () => {
     // Set game as started and hide settings
     setGameStarted(true)
     setShowSettings(false)
-    setShowContinuePrompt(false)
 
     // Update game status
     setGameStatus(GameStatus.IN_PROGRESS)
@@ -1009,16 +1078,24 @@ const GameScreen = () => {
 
     // Reset state
     setSavedGameState(null)
-    setShowContinuePrompt(false)
 
     // Show settings screen
     setShowSettings(true)
   }
-
-  // Effect to handle when attempts reach 0
   useEffect(() => {
     // Only proceed if the game has started and attempts have been initialized
     if (!gameStarted || remainingAttempts === null) return
+
+    // Add a check for allWordsFound here as well
+    const allWordsFound =
+      wordsToFind.length >= wordCount && wordsToFind.every((w) => w.found)
+
+    // Skip this logic if all words are found
+    if (allWordsFound) {
+      // If all words are found, always reset the handled flag
+      attemptsHandledRef.current = false
+      return
+    }
 
     if (remainingAttempts === 0 && !attemptsHandledRef.current) {
       // Mark as handled to prevent infinite loops
@@ -1043,7 +1120,7 @@ const GameScreen = () => {
       // Reset the handled flag when attempts are greater than 0
       attemptsHandledRef.current = false
     }
-  }, [remainingAttempts, gameStarted, wordsToFind])
+  }, [remainingAttempts, gameStarted, wordsToFind, wordCount])
 
   // Update last logged submission when a new word is submitted
   useEffect(() => {
@@ -1067,7 +1144,6 @@ const GameScreen = () => {
 
       // First hide settings screen, then fetch words
       setShowSettings(false)
-      setShowContinuePrompt(false)
       setGameStarted(false)
       fetchWords() // This will trigger initializeGame in the useEffect
       return
@@ -1082,7 +1158,6 @@ const GameScreen = () => {
 
     // First hide settings screen, then fetch words
     setShowSettings(false)
-    setShowContinuePrompt(false)
     setGameStarted(false)
     fetchWords() // This will trigger initializeGame in the useEffect
   }
@@ -1099,25 +1174,45 @@ const GameScreen = () => {
     }
   }, [isGameComplete, gameStatus])
 
-  // Update game outcome based on whether all words are found
-  // This effect runs AFTER the remainingAttempts effect
   useEffect(() => {
     if (gameStarted) {
       const allWordsFound =
         wordsToFind.length >= wordCount && wordsToFind.every((w) => w.found)
 
-      // Don't override LOSS state if attempts are 0
-      if (remainingAttempts === 0) {
-        setGameOutcome(GameOutcome.LOSS)
-        setGameStatus(GameStatus.COMPLETED)
-      } else if (allWordsFound) {
-        setGameOutcome(GameOutcome.WIN)
-        setGameStatus(GameStatus.COMPLETED)
-      } else {
-        setGameOutcome(GameOutcome.IN_PROGRESS)
+      // Check if the game is already in LOSS state
+      if (gameOutcome === GameOutcome.LOSS) {
+        // If already LOSS, don't change it even if all words are found
+        // Just ensure the game status is COMPLETED
+        if (gameStatus !== GameStatus.COMPLETED) {
+          setGameStatus(GameStatus.COMPLETED)
+        }
+      }
+      // If not already LOSS, proceed with normal logic
+      else {
+        // First check if all words are found
+        if (allWordsFound) {
+          // console.log('Setting game outcome to WIN from second effect')
+          setGameOutcome(GameOutcome.WIN)
+          setGameStatus(GameStatus.COMPLETED)
+        }
+        // Only set LOSS if attempts are 0
+        else if (remainingAttempts === 0) {
+          // console.log('Setting game outcome to LOSS from second effect')
+          setGameOutcome(GameOutcome.LOSS)
+          setGameStatus(GameStatus.COMPLETED)
+        } else {
+          setGameOutcome(GameOutcome.IN_PROGRESS)
+        }
       }
     }
-  }, [wordsToFind, wordCount, gameStarted, remainingAttempts])
+  }, [
+    wordsToFind,
+    wordCount,
+    gameStarted,
+    remainingAttempts,
+    gameOutcome,
+    gameStatus,
+  ])
 
   // State for confetti
   const { width, height } = useWindowSize()
@@ -1127,9 +1222,27 @@ const GameScreen = () => {
   // Show confetti when game is won
   useEffect(() => {
     // Only show confetti if the game is complete AND won
-    if (isGameComplete && gameOutcome === GameOutcome.WIN) {
+    if (gameOutcome === GameOutcome.WIN) {
       setShowConfetti(true)
       setConfettiRecycle(true)
+
+      // Calculate total points from wordSubmissions
+      const totalPoints = wordSubmissions.reduce(
+        (total, submission) => total + submission.points,
+        0,
+      )
+
+      // Save the points incrementally to Chrome local storage
+      chrome.storage.local.get(['totalGamePoints'], (result) => {
+        const currentPoints = result.totalGamePoints || 0
+        const newTotalPoints = currentPoints + totalPoints
+
+        chrome.storage.local.set({ totalGamePoints: newTotalPoints }, () => {
+          if (chrome.runtime.lastError) {
+            console.error('Error saving points:', chrome.runtime.lastError)
+          }
+        })
+      })
 
       // Stop generating new confetti after 2 seconds
       // but keep existing pieces falling until they reach the bottom
@@ -1139,7 +1252,7 @@ const GameScreen = () => {
 
       return () => clearTimeout(timer)
     }
-  }, [isGameComplete])
+  }, [gameOutcome])
 
   return (
     <div className='flex flex-col w-[400px] min-h-[600px] scrollbar-hide'>
@@ -1194,15 +1307,11 @@ const GameScreen = () => {
             </TooltipProvider>
           )}
           {/* Only show the reset icon when not in settings phase */}
-          {!showSettings && !showContinuePrompt && (
+          {!showSettings && (
             <TooltipProvider>
               <Tooltip>
                 <TooltipTrigger asChild>
-                  <RefreshCw
-                    size={18}
-                    className='text-muted-foreground cursor-pointer hover:text-foreground'
-                    onClick={resetGame}
-                  />
+                  <ResetButton resetFunc={() => resetGame()} />
                 </TooltipTrigger>
                 <TooltipContent>
                   <p>Reset Game</p>
@@ -1225,32 +1334,6 @@ const GameScreen = () => {
             maxWordLength={maxWordLength}
             resetGame={resetGame}
           />
-        ) : showContinuePrompt ? (
-          <div className='flex flex-col gap-6 p-6 items-center justify-center h-full'>
-            <div className='text-center'>
-              <h2 className='text-xl font-semibold mb-2'>Game in Progress</h2>
-              <p className='text-sm text-muted-foreground mb-4'>
-                You have a paused game with{' '}
-                {savedGameState?.wordsToFind?.filter((w: any) => w.found)
-                  .length || 0}{' '}
-                of {savedGameState?.wordsToFind?.length || 0} words found.
-              </p>
-              <div className='flex flex-col gap-3'>
-                <button
-                  onClick={continuePausedGame}
-                  className='px-4 py-2 bg-primary text-primary-foreground rounded-md hover:bg-primary/90 transition-colors'
-                >
-                  Continue Game
-                </button>
-                <button
-                  onClick={startNewGame}
-                  className='px-4 py-2 bg-secondary text-secondary-foreground rounded-md hover:bg-secondary/90 transition-colors'
-                >
-                  Start New Game
-                </button>
-              </div>
-            </div>
-          </div>
         ) : showSettings ? (
           <GameSettingsPhase
             onStartGame={handleStartGame}
@@ -1324,6 +1407,43 @@ const BackButton = ({ isGamePlaying }: BackButtonProps) => {
             onClick={() => goBack()}
           >
             Exit Game
+          </AlertDialogAction>
+        </AlertDialogFooter>
+      </AlertDialogContent>
+    </AlertDialog>
+  )
+}
+
+interface ResetButtonProps {
+  resetFunc: () => void
+}
+
+const ResetButton = ({ resetFunc }: ResetButtonProps) => {
+  return (
+    <AlertDialog>
+      <AlertDialogTrigger asChild>
+        <RefreshCw
+          size={18}
+          className='text-muted-foreground cursor-pointer hover:text-foreground'
+        />
+      </AlertDialogTrigger>
+      <AlertDialogContent>
+        <AlertDialogHeader>
+          <AlertDialogTitle>Reset Game?</AlertDialogTitle>
+          <AlertDialogDescription>
+            Resetting will erase all your saved progress. Are you sure you want
+            to start over?
+          </AlertDialogDescription>
+        </AlertDialogHeader>
+        <AlertDialogFooter>
+          <AlertDialogCancel className='cursor-pointer'>
+            Cancel
+          </AlertDialogCancel>
+          <AlertDialogAction
+            className='cursor-pointer'
+            onClick={() => resetFunc()}
+          >
+            Reset Game
           </AlertDialogAction>
         </AlertDialogFooter>
       </AlertDialogContent>

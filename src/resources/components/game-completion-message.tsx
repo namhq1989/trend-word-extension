@@ -52,7 +52,6 @@ const GameCompletionMessage = ({
   gameOutcome,
 }: GameCompletionMessageProps) => {
   const isWin = gameOutcome === GameOutcome.WIN
-
   const [congratulation, setCongratulation] = useState({
     title: title || (isWin ? 'Congratulations' : 'Game Over'),
     message:
@@ -62,24 +61,29 @@ const GameCompletionMessage = ({
         : "You've run out of attempts. Try again!"),
   })
 
-  // Use a ref to track if we've already set the message
-  const messageSetRef = useRef(false)
+  // Use a ref to track the previous isWin value
+  const prevIsWinRef = useRef(isWin)
 
   useEffect(() => {
-    // Only set the message once to prevent infinite loops
-    if (!messageSetRef.current) {
-      const options = messageOptions[isWin ? 'win' : 'loss']
-      const randomIndex = Math.floor(Math.random() * options.titles.length)
-
-      setCongratulation({
-        title: title || options.titles[randomIndex % options.titles.length],
-        message:
-          message || options.messages[randomIndex % options.messages.length],
-      })
-
-      // Mark as set
-      messageSetRef.current = true
+    // Reset the message when isWin changes
+    if (prevIsWinRef.current !== isWin) {
+      prevIsWinRef.current = isWin
     }
+
+    // Always use the current isWin value to get the correct options
+    const options = messageOptions[isWin ? 'win' : 'loss']
+
+    // If title or message is provided, use those instead of random options
+    const newCongratulation = {
+      title:
+        title ||
+        options.titles[Math.floor(Math.random() * options.titles.length)],
+      message:
+        message ||
+        options.messages[Math.floor(Math.random() * options.messages.length)],
+    }
+
+    setCongratulation(newCongratulation)
   }, [isWin, title, message])
 
   return (

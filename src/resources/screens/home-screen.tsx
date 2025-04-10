@@ -50,7 +50,7 @@ const NextWordCountdown = () => {
           // Clean up interval on unmount
           return () => clearInterval(intervalId)
         } else {
-          setCountdown('No scheduled updates')
+          setCountdown('')
         }
       } catch (error) {
         console.error('Error fetching next notification time:', error)
@@ -90,20 +90,22 @@ const NextWordCountdown = () => {
   }, [])
 
   return (
-    <TooltipProvider>
-      <Tooltip>
-        <TooltipTrigger asChild>
-          <div className='flex items-center text-xs text-base-content/70 cursor-pointer'>
-            <span className='text-xs font-bold text-muted-foreground'>
-              in {countdown}
-            </span>
-          </div>
-        </TooltipTrigger>
-        <TooltipContent className='mr-4'>
-          <p>Time until next word notification</p>
-        </TooltipContent>
-      </Tooltip>
-    </TooltipProvider>
+    countdown && (
+      <TooltipProvider>
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <div className='flex items-center text-xs text-base-content/70 cursor-pointer'>
+              <span className='text-xs font-bold text-muted-foreground'>
+                in {countdown}
+              </span>
+            </div>
+          </TooltipTrigger>
+          <TooltipContent className='mr-4'>
+            <p>Time until next word notification</p>
+          </TooltipContent>
+        </Tooltip>
+      </TooltipProvider>
+    )
   )
 }
 

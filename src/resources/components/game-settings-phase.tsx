@@ -35,27 +35,15 @@ const GameSettingsPhase = ({
   autoRevealCount,
   setAutoRevealCount,
 }: GameSettingsPhaseProps) => {
-  // State to track if there's a paused game
-  const [hasPausedGame, setHasPausedGame] = React.useState(false)
-
-  // Check for paused game on component mount
-  useEffect(() => {
-    chrome.storage.local.get(['gameState'], (result) => {
-      if (result.gameState && result.gameState.gameStatus === 'paused') {
-        setHasPausedGame(true)
-      }
-    })
-  }, [])
-
   // Handle start game button click
-  const handleStartGame = (forceNew = false) => {
+  const handleStartGame = () => {
     // Create settings object
     const settings = {
       wordCount,
       maxWordLength,
       timeLimit,
       autoRevealCount,
-      forceNewGame: forceNew,
+      forceNewGame: true,
     }
 
     // Save settings to Chrome storage
@@ -208,33 +196,13 @@ const GameSettingsPhase = ({
       </div>
 
       <div className='flex flex-col gap-4'>
-        {hasPausedGame ? (
-          <>
-            <Button
-              onClick={() => handleStartGame(false)}
-              className='w-full'
-              size='lg'
-            >
-              Resume Paused Game
-            </Button>
-            <Button
-              onClick={() => handleStartGame(true)}
-              className='w-full'
-              variant='outline'
-              size='lg'
-            >
-              Start New Game
-            </Button>
-          </>
-        ) : (
-          <Button
-            onClick={() => handleStartGame(false)}
-            className='w-full'
-            size='lg'
-          >
-            Start Game
-          </Button>
-        )}
+        <Button
+          onClick={handleStartGame}
+          className='w-full cursor-pointer'
+          size='lg'
+        >
+          Start Game
+        </Button>
       </div>
     </div>
   )

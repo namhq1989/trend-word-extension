@@ -218,6 +218,17 @@ const GamePlayPhase = ({
 
       // Clear selection
       setSelectedCells([])
+
+      // Important: Check if all words are found after updating wordsToFind
+      const allWordsFound =
+        updatedWordsToFind.every((w) => w.found) &&
+        updatedWordsToFind.length >= wordCount
+
+      // Don't reduce attempts if this was the last word found
+      if (allWordsFound) {
+        // Make sure attempts doesn't reach 0 when all words are found
+        currentAttempts = Math.max(1, currentAttempts)
+      }
     } else {
       // Word not found - reduce attempts and trigger animation
       currentAttempts = Math.max(0, attempts - 1)
@@ -386,7 +397,10 @@ const GamePlayPhase = ({
       />
 
       {/* Game Completion Message - Win or Loss */}
-      {isGameComplete && <GameCompletionMessage gameOutcome={gameOutcome} />}
+      {(gameOutcome === GameOutcome.WIN ||
+        gameOutcome === GameOutcome.LOSS) && (
+        <GameCompletionMessage gameOutcome={gameOutcome} />
+      )}
 
       {/* Game grid with shake animation when incorrect */}
       <div
