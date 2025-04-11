@@ -73,12 +73,6 @@ function addWordToDatabase(word) {
       return
     }
 
-    // Add timestamp to the word
-    const wordWithDate = {
-      ...word,
-      date: new Date().toISOString(),
-    }
-
     // Extract unique categories from news items
     if (word.news && word.news.length > 0) {
       // console.log('Word has news items in addWordToDatabase:', word.news.length)
@@ -100,16 +94,12 @@ function addWordToDatabase(word) {
         }
       })
 
-      wordWithDate.categories = Array.from(categoriesSet)
-      // console.log(
-      //   'Extracted categories in addWordToDatabase:',
-      //   wordWithDate.categories,
-      // )
+      word.categories = Array.from(categoriesSet)
     }
 
     const transaction = db.transaction([WORDS_STORE_NAME], 'readwrite')
     const store = transaction.objectStore(WORDS_STORE_NAME)
-    const request = store.put(wordWithDate) // Using put instead of add to handle updates
+    const request = store.put(word) // Using put instead of add to handle updates
 
     request.onerror = (event) => {
       // console.error('Error adding word to IndexedDB:', event.target.error)
@@ -914,13 +904,72 @@ async function fetchNewWord() {
   }
 }
 
+async function getInitialWords() {
+  try {
+    // Get API host
+    const apiHost = await getApiHost()
+    const url = `${apiHost}/api/word/initial`
+
+    // Fetch initial words
+    const response = await fetch(url, {
+      method: 'GET',
+      headers: {
+        'Content-Type': 'application/json',
+        Accept: 'application/json',
+      },
+    })
+
+    if (!response.ok) {
+      console.error(`Initial API call failed: ${response.status}`)
+      return null // Return null if API call fails
+    }
+
+    const data = await response.json()
+    const words = data.data.words || []
+
+    if (!words || words.length === 0) {
+      console.warn('No words returned from initial API')
+      return null
+    }
+
+    // Sort words by date (newest first)
+    words.sort((a, b) => {
+      const dateA = new Date(a.date || 0)
+      const dateB = new Date(b.date || 0)
+      return dateB - dateA // Descending order (newest first)
+    })
+
+    // Add all words to IndexedDB
+    for (const word of words) {
+      await addWordToDatabase(word)
+    }
+
+    // Mark setup as completed in storage
+    await new Promise((resolve) => {
+      chrome.storage.local.set({ initialSetupCompleted: true }, resolve)
+    })
+
+    // Return the first word from the sorted array
+    return words[0]
+  } catch (error) {
+    console.error('Error during initial setup:', error)
+    return null
+  }
+}
+
 // Initialize the extension
-chrome.runtime.onInstalled.addListener(async () => {
+chrome.runtime.onInstalled.addListener(async (details) => {
   await initializeDB()
   // Set up default alarm for notifications
   setupDefaultAlarm()
   // Set up word fetching interval
   setupWordFetchingInterval()
+
+  if (details.reason === 'install') {
+    await new Promise((resolve) => {
+      chrome.storage.local.set({ needInitialWordsFetch: true }, resolve)
+    })
+  }
 })
 
 // Setup default alarm for notifications
@@ -1198,6 +1247,67 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
       } catch (error) {
         console.error('Failed to initialize database:', error)
         return { success: false, error: 'Failed to initialize database' }
+      }
+    }
+
+    if (request.action === 'checkFirstPopupOpen') {
+      try {
+        const result = await new Promise((resolve) => {
+          chrome.storage.local.get(
+            ['initialSetupCompleted', 'needInitialWordsFetch'],
+            (result) => {
+              resolve({
+                isFirstOpen: !result.initialSetupCompleted,
+                needInitialWordsFetch: !!result.needInitialWordsFetch,
+              })
+            },
+          )
+        })
+
+        // If we need to fetch initial words, start the fetch
+        if (result.needInitialWordsFetch) {
+          // Clear the flag first to prevent duplicate attempts
+          await new Promise((resolve) => {
+            chrome.storage.local.set({ needInitialWordsFetch: false }, resolve)
+          })
+
+          // Fire a message to popup to show loading
+          chrome.runtime
+            .sendMessage({
+              action: 'initialSetupStarted',
+              message: 'Downloading initial words...',
+            })
+            .catch(() => {
+              // Ignore error when no popup is open
+            })
+
+          // Start the fetch and wait for it to complete to get the first word
+          const firstWord = await getInitialWords()
+
+          // Set this as the current word
+          if (firstWord) {
+            chrome.storage.local.set({ currentWord: firstWord })
+          }
+
+          // Once completed, notify popup with the first word
+          chrome.runtime
+            .sendMessage({
+              action: 'initialSetupCompleted',
+              word: firstWord, // Include the first word in the message
+            })
+            .catch(() => {
+              // Ignore error when no popup is open
+            })
+        }
+
+        return {
+          success: true,
+          isFirstOpen: result.isFirstOpen,
+          needsSetup: result.needInitialWordsFetch,
+        }
+      } catch (error) {
+        console.error('Error handling checkFirstPopupOpen:', error)
+        return { success: false, error: error.message }
       }
     }
 

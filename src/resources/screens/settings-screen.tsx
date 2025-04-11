@@ -111,7 +111,9 @@ const SettingsScreen = () => {
   const hasSelectedLevels = difficultyLevels.some((level) => level.isSelected)
 
   // Check if any categories are selected
-  const hasSelectedCategories = categories.some((category) => category.isSelected)
+  const hasSelectedCategories = categories.some(
+    (category) => category.isSelected,
+  )
 
   return (
     <div className='flex flex-col w-[400px] min-h-[600px] scrollbar-hide'>
@@ -217,7 +219,7 @@ const SettingsScreen = () => {
                 <SelectContent>
                   <SelectGroup>
                     <SelectLabel>Receive notifications</SelectLabel>
-                    <SelectItem value='1'>Every 1 minute</SelectItem>
+                    {/* <SelectItem value='1'>Every 1 minute</SelectItem> */}
                     <SelectItem value='30'>Every 30 minutes</SelectItem>
                     <SelectItem value='60'>Every 1 hour</SelectItem>
                     <SelectItem value='90'>Every 90 minutes</SelectItem>
@@ -287,8 +289,7 @@ const SettingsScreen = () => {
                 </TooltipTrigger>
                 <TooltipContent className='w-[200px] p-4 mr-4'>
                   <p className='text-sm'>
-                    Select which categories you want to receive words
-                    from
+                    Select which categories you want to receive words from
                     {!hasSelectedCategories &&
                       '. Currently, no categories are selected, which means words from all categories will be shown'}
                   </p>
@@ -363,7 +364,12 @@ const SettingsScreen = () => {
               {/*</div>*/}
               <div className='flex gap-2 items-center cursor-pointer'>
                 <Heart size={16} className='text-primary' />
-                <span className='text-sm text-primary' onClick={openWordDropUrl}>Rate extension</span>
+                <span
+                  className='text-sm text-primary'
+                  onClick={openWordDropUrl}
+                >
+                  Rate extension
+                </span>
               </div>
             </div>
           </div>
