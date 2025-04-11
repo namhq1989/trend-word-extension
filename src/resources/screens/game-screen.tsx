@@ -1,8 +1,8 @@
 import { useEffect, useState, useCallback, useRef } from 'react'
 import Confetti from 'react-confetti'
 import { useWindowSize } from 'react-use'
-import { RefreshCw, Eye, EyeOff, ChevronLeft } from 'lucide-react'
-import { goBack } from 'react-chrome-extension-router'
+import { RefreshCw, Eye, EyeOff, ChevronLeft, History } from 'lucide-react'
+import { goBack, goTo } from 'react-chrome-extension-router'
 import HeaderTitle from '@/resources/components/header-title.tsx'
 import {
   AlertDialog,
@@ -36,6 +36,8 @@ import GamePlayPhase, {
   WordToFind,
 } from '@/resources/components/game-play-phase'
 import NotEnoughWordsMessage from '@/resources/components/not-enough-words-message'
+import TotalPointsDisplay from '../components/total-game-points'
+import RecentGamesScreen from './recent-games-screen'
 
 // Constants
 const AUTO_SAVE_INTERVAL_SECONDS = 5
@@ -1073,20 +1075,14 @@ const GameScreen = () => {
       setSavedGameState(gameStateData)
     }
 
-    console.log('Continuing paused game with data:', stateToUse)
-
     // Load game settings
     setWordCount(stateToUse.wordCount || 7)
     setMaxWordLength(stateToUse.maxWordLength || 8)
     setTimeLimit(stateToUse.timeLimit || 5)
     setAutoRevealCount(stateToUse.autoRevealCount || 2)
 
-    console.log('Loading game with wordCount:', stateToUse.wordCount)
-    console.log('Saved remainingAttempts:', stateToUse.remainingAttempts)
-
     // Calculate what the attempts should be based on the word count
     const calculatedAttempts = calculateAttempts(stateToUse.wordCount || 7)
-    console.log('Calculated attempts based on wordCount:', calculatedAttempts)
 
     // Load game state
     setGameGrid(stateToUse.gameGrid || [])
@@ -1103,7 +1099,6 @@ const GameScreen = () => {
           ? stateToUse.remainingAttempts
           : calculatedAttempts
 
-    console.log('Setting remainingAttempts to:', attemptsToUse)
     setRemainingAttempts(attemptsToUse)
     setTimeRemaining(stateToUse.timeRemaining || null)
 
@@ -1301,16 +1296,54 @@ const GameScreen = () => {
         0,
       )
 
-      // Save the points incrementally to Chrome local storage
-      chrome.storage.local.get(['totalGamePoints'], (result) => {
+      // Create simplified game summary with only essential data
+      const gameData = {
+        // Record which words were found and their points
+        words: wordSubmissions
+          .filter((submission) => submission.found)
+          .map((submission) => ({
+            word: submission.word,
+            points: submission.points,
+          })),
+        // Total points for this game
+        points: totalPoints,
+        // Time spent on the game in seconds
+        timeSpent: timeLimit * 60 - (timeRemaining || 0),
+        // When the game was won
+        winningAt: new Date().toISOString(),
+      }
+
+      // Save the completed game data and update total points
+      chrome.storage.local.get(['recentGames', 'totalGamePoints'], (result) => {
+        // Handle total points tracking
         const currentPoints = result.totalGamePoints || 0
         const newTotalPoints = currentPoints + totalPoints
 
-        chrome.storage.local.set({ totalGamePoints: newTotalPoints }, () => {
-          if (chrome.runtime.lastError) {
-            console.error('Error saving points:', chrome.runtime.lastError)
-          }
-        })
+        // Handle recent games list
+        let recentGames = result.recentGames || []
+
+        // Add the new game at the beginning of the array
+        recentGames.unshift(gameData)
+
+        // Keep only the most recent 10 games
+        if (recentGames.length > 10) {
+          recentGames = recentGames.slice(0, 10)
+        }
+
+        // Save both updated values to Chrome storage
+        chrome.storage.local.set(
+          {
+            recentGames,
+            totalGamePoints: newTotalPoints,
+          },
+          () => {
+            if (chrome.runtime.lastError) {
+              console.error('Error saving game data:', chrome.runtime.lastError)
+            } else {
+              console.log('Game data saved successfully')
+            }
+          },
+        )
       })
 
       // Stop generating new confetti after 2 seconds
@@ -1343,23 +1376,39 @@ const GameScreen = () => {
         />
       )}
       <div className='flex w-full flex-row justify-between p-4 border-b-[1px]'>
-        <BackButton isGamePlaying={gameStarted} />
+        <BackButton isGamePlaying={gameStarted && !isGameComplete} />
         <HeaderTitle title='Word Game' />
         <div className='flex flex-row gap-2 items-center'>
+          {showSettings && (
+            <TooltipProvider>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <History
+                    size={20}
+                    className='text-muted-foreground cursor-pointer hover:text-foreground'
+                    onClick={() => goTo(RecentGamesScreen)}
+                  />
+                </TooltipTrigger>
+                <TooltipContent className='mr-4'>
+                  <p>Recent games</p>
+                </TooltipContent>
+              </Tooltip>
+            </TooltipProvider>
+          )}
           {/* Test Mode Toggle - Only show in non-release environments */}
-          {import.meta.env.VITE_ENV !== 'release' && (
+          {import.meta.env.VITE_ENV !== 'release' && !showSettings && (
             <TooltipProvider>
               <Tooltip>
                 <TooltipTrigger asChild>
                   {showMaskedWords ? (
                     <EyeOff
-                      size={18}
+                      size={20}
                       className='text-primary cursor-pointer hover:text-primary/80'
                       onClick={toggleShowMaskedWords}
                     />
                   ) : (
                     <Eye
-                      size={18}
+                      size={20}
                       className='text-muted-foreground cursor-pointer hover:text-foreground'
                       onClick={toggleShowMaskedWords}
                     />
@@ -1388,7 +1437,6 @@ const GameScreen = () => {
               </Tooltip>
             </TooltipProvider>
           )}
-          {/* Information icon removed as requested */}
         </div>
       </div>
 
@@ -1454,7 +1502,6 @@ interface BackButtonProps {
 }
 
 const BackButton = ({ isGamePlaying }: BackButtonProps) => {
-  // If game is not playing, just go back directly
   if (!isGamePlaying) {
     return <ChevronLeft className='cursor-pointer' onClick={() => goBack()} />
   }
