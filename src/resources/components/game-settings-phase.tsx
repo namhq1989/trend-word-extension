@@ -10,14 +10,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
-
-// Game settings interface
-export interface GameSettings {
-  wordCount: number
-  maxWordLength: number
-  timeLimit: number
-  autoRevealCount: number
-}
+import { GameSettings } from '@/app/models/game-types'
 
 interface GameSettingsPhaseProps {
   onStartGame: (settings: GameSettings) => void
@@ -50,6 +43,7 @@ const GameSettingsPhase = ({
       maxWordLength,
       timeLimit,
       autoRevealCount,
+      forceNewGame: true,
     }
 
     // Save settings to Chrome storage
@@ -103,7 +97,7 @@ const GameSettingsPhase = ({
   )
 
   return (
-    <div className='flex flex-col gap-6'>
+    <div className='flex flex-col gap-6 p-4'>
       <div className='flex flex-col gap-2'>
         <h2 className='text-xl font-bold'>Game Settings</h2>
         <p className='text-sm text-muted-foreground'>
@@ -202,7 +196,11 @@ const GameSettingsPhase = ({
       </div>
 
       <div className='flex flex-col gap-4'>
-        <Button onClick={handleStartGame} className='w-full' size='lg'>
+        <Button
+          onClick={handleStartGame}
+          className='w-full cursor-pointer'
+          size='lg'
+        >
           Start Game
         </Button>
       </div>
