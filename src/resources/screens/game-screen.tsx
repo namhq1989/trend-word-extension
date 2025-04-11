@@ -36,7 +36,6 @@ import GamePlayPhase, {
   WordToFind,
 } from '@/resources/components/game-play-phase'
 import NotEnoughWordsMessage from '@/resources/components/not-enough-words-message'
-import TotalPointsDisplay from '../components/total-game-points'
 import RecentGamesScreen from './recent-games-screen'
 
 // Constants
@@ -1111,21 +1110,6 @@ const GameScreen = () => {
     setTimerActive(true)
   }
 
-  // Function to start a new game
-  const startNewGame = async () => {
-    // Clear the saved game state
-    try {
-      await chrome.storage.local.remove('gameState')
-    } catch (error) {
-      // Handle error silently
-    }
-
-    // Reset state
-    setSavedGameState(null)
-
-    // Show settings screen
-    setShowSettings(true)
-  }
   useEffect(() => {
     // Only proceed if the game has started and attempts have been initialized
     if (!gameStarted || remainingAttempts === null) return
