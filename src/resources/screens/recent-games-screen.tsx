@@ -116,15 +116,17 @@ const RecentGamesScreen = () => {
         </div>
       ) : (
         <div className='flex-1 flex flex-col p-4 gap-4'>
-          <div className='flex items-center gap-1'>
-            <h2 className='text-base font-semibold'>Total Points:</h2>
-            <span className='font-bold text-lg text-primary'>
-              {formatReadableNumber(gamesData.totalGamePoints)} pts
-            </span>
-          </div>
+          {gamesData.recentGames.length > 0 && (
+            <div className='flex items-center gap-1'>
+              <h2 className='text-base font-semibold'>Total Points:</h2>
+              <span className='font-bold text-lg text-primary'>
+                {formatReadableNumber(gamesData.totalGamePoints)} pts
+              </span>
+            </div>
+          )}
 
-          {gamesData.recentGames.length === 0 ? (
-            <div className='flex-1 flex justify-center items-center flex-col gap-4 opacity-70 mt-8'>
+          {!gamesData.recentGames.length ? (
+            <div className='flex-1 flex mt-8 items-center flex-col gap-4 text-base text-center opacity-70'>
               <p>No games played yet. Start playing to see your history!</p>
             </div>
           ) : (
