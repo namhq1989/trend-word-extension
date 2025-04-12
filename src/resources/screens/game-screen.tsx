@@ -158,21 +158,12 @@ const GameScreen = () => {
     const gameComplete =
       wordsToFind.length >= wordCount && wordsToFind.every((w) => w.found)
 
-    // Log game completion status
-    // console.log('Game completion check:', {
-    //   gameComplete,
-    //   wordsToFindLength: wordsToFind.length,
-    //   wordCount,
-    //   allWordsFound: wordsToFind.every((w) => w.found),
-    // })
-
     // Set game outcome when game is complete, but ONLY if it's not already set to LOSS
     if (
       gameComplete &&
       gameStatus !== GameStatus.COMPLETED &&
       gameOutcome !== GameOutcome.LOSS
     ) {
-      // console.log('Setting game outcome to WIN')
       setGameOutcome(GameOutcome.WIN)
       setGameStatus(GameStatus.COMPLETED)
     }
@@ -193,27 +184,39 @@ const GameScreen = () => {
           return prev - 1
         })
       }, 1000)
-    } else if (timeRemaining === 0) {
-      // Time's up - reveal all words
-      const updatedWordsToFind = wordsToFind.map((word) => ({
-        ...word,
-        found: true,
-      }))
-      setWordsToFind(updatedWordsToFind)
+    } else if (timeRemaining === 0 && timerActive) {
+      // Time's up - only run this once when time hits zero and timer is still active
+      // First, stop the timer to prevent further updates
       setTimerActive(false)
 
-      // Set game outcome to LOSS if time runs out
-      if (gameStatus !== GameStatus.COMPLETED) {
-        // console.log('Setting game outcome to LOSS (time out)')
+      // Then, handle the game end in a single update
+      // We'll use a timeout to ensure this happens after the current render cycle
+      setTimeout(() => {
+        // First set the game as lost
         setGameOutcome(GameOutcome.LOSS)
         setGameStatus(GameStatus.COMPLETED)
-      }
+
+        // Then reveal all words in a single update
+        setWordsToFind((prevWords) =>
+          prevWords.map((word) => ({
+            ...word,
+            found: true,
+          })),
+        )
+      }, 0)
     }
 
     return () => {
       if (timer) clearInterval(timer)
     }
-  }, [timerActive, timeRemaining, wordsToFind, wordCount, gameStatus])
+  }, [
+    timerActive,
+    timeRemaining,
+    wordsToFind,
+    wordCount,
+    gameStatus,
+    gameOutcome,
+  ])
 
   // Generate game grid when words are loaded and settings are confirmed
   useEffect(() => {
@@ -360,12 +363,12 @@ const GameScreen = () => {
           lastSaved: new Date().toISOString(),
         }
 
-        console.log(
-          'Saving unmount game state with attempts:',
-          attemptsToSave,
-          'wordCount:',
-          wordCount,
-        )
+        // console.log(
+        //   'Saving unmount game state with attempts:',
+        //   attemptsToSave,
+        //   'wordCount:',
+        //   wordCount,
+        // )
 
         chrome.storage.local.set({ gameState: unmountGameState })
       }
@@ -866,6 +869,9 @@ const GameScreen = () => {
       // Only after successful removal, update the state variables
       // Wrap in setTimeout to ensure they happen after the storage operation completes
       setTimeout(() => {
+        // Reset attemptsHandledRef to prevent issues with the next game
+        attemptsHandledRef.current = false
+
         // Reset all game-related state variables
         setGameStarted(false)
         setTimerActive(false)
@@ -1222,45 +1228,75 @@ const GameScreen = () => {
     }
   }, [isGameComplete, gameStatus])
 
+  // useEffect(() => {
+  //   if (gameStarted) {
+  //     const allWordsFound =
+  //       wordsToFind.length >= wordCount && wordsToFind.every((w) => w.found)
+
+  //     // Check if the game is already in LOSS state
+  //     if (gameOutcome === GameOutcome.LOSS) {
+  //       // If already LOSS, don't change it even if all words are found
+  //       // Just ensure the game status is COMPLETED
+  //       if (gameStatus !== GameStatus.COMPLETED) {
+  //         setGameStatus(GameStatus.COMPLETED)
+  //       }
+  //     }
+  //     // If not already LOSS, proceed with normal logic
+  //     else {
+  //       // First check if all words are found
+  //       if (allWordsFound) {
+  //         // console.log('Setting game outcome to WIN from second effect')
+  //         setGameOutcome(GameOutcome.WIN)
+  //         setGameStatus(GameStatus.COMPLETED)
+  //       }
+  //       // Only set LOSS if attempts are 0
+  //       else if (remainingAttempts === 0) {
+  //         // console.log('Setting game outcome to LOSS from second effect')
+  //         setGameOutcome(GameOutcome.LOSS)
+  //         setGameStatus(GameStatus.COMPLETED)
+  //       } else {
+  //         setGameOutcome(GameOutcome.IN_PROGRESS)
+  //       }
+  //     }
+  //   }
+  // }, [
+  //   wordsToFind,
+  //   wordCount,
+  //   gameStarted,
+  //   remainingAttempts,
+  //   gameOutcome,
+  //   gameStatus,
+  // ])
+
   useEffect(() => {
     if (gameStarted) {
       const allWordsFound =
         wordsToFind.length >= wordCount && wordsToFind.every((w) => w.found)
 
-      // Check if the game is already in LOSS state
-      if (gameOutcome === GameOutcome.LOSS) {
-        // If already LOSS, don't change it even if all words are found
-        // Just ensure the game status is COMPLETED
-        if (gameStatus !== GameStatus.COMPLETED) {
-          setGameStatus(GameStatus.COMPLETED)
-        }
-      }
-      // If not already LOSS, proceed with normal logic
-      else {
+      // Only update if game is in progress - avoid updating completed games
+      if (gameStatus === GameStatus.IN_PROGRESS) {
         // First check if all words are found
         if (allWordsFound) {
-          // console.log('Setting game outcome to WIN from second effect')
           setGameOutcome(GameOutcome.WIN)
           setGameStatus(GameStatus.COMPLETED)
         }
-        // Only set LOSS if attempts are 0
-        else if (remainingAttempts === 0) {
-          // console.log('Setting game outcome to LOSS from second effect')
+        // Only set LOSS if attempts are 0 AND we haven't already handled it
+        else if (remainingAttempts === 0 && !attemptsHandledRef.current) {
+          attemptsHandledRef.current = true
           setGameOutcome(GameOutcome.LOSS)
           setGameStatus(GameStatus.COMPLETED)
-        } else {
-          setGameOutcome(GameOutcome.IN_PROGRESS)
+
+          // Reveal all words
+          setWordsToFind((prevWords) =>
+            prevWords.map((word) => ({
+              ...word,
+              found: true,
+            })),
+          )
         }
       }
     }
-  }, [
-    wordsToFind,
-    wordCount,
-    gameStarted,
-    remainingAttempts,
-    gameOutcome,
-    gameStatus,
-  ])
+  }, [wordsToFind, wordCount, gameStarted, remainingAttempts, gameStatus])
 
   // State for confetti
   const { width, height } = useWindowSize()
