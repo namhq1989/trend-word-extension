@@ -17,7 +17,7 @@ chrome.storage.local.set(
 chrome.runtime.onMessage.addListener(function (message) {
   if (message.action === 'initialSetupStarted') {
     // Show loading UI
-    console.log('Setup started, showing loading state')
+    // console.log('Setup started, showing loading state')
     // Code to update UI to show loading state
   } else if (message.action === 'initialSetupCompleted') {
     if (message.word) {
@@ -33,7 +33,7 @@ const App = () => {
       if (response && response.success) {
         if (response.needsSetup) {
           // Show loading UI while initial words are being fetched
-          console.log('Initial setup needed, showing loading UI')
+          // console.log('Initial setup needed, showing loading UI')
           // You would add code here to show a loading spinner or message
         }
       }
